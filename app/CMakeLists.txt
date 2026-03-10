@@ -17,10 +17,12 @@ target_include_directories(app PRIVATE
   include
 )
 
-# HAL layer (to be added in Phase 2)
-# target_sources(app PRIVATE
-#   src/hal/half_duplex_uart.c
-# )
+# HAL layer (Phase 2)
+target_sources(app PRIVATE
+  src/hal/half_duplex_uart.c
+  src/hal/hal_gpio.c
+  src/hal/hal_timer.c
+)
 
 # Servo driver (to be added in Phase 3)
 # target_sources(app PRIVATE
