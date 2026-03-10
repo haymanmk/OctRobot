@@ -7,13 +7,13 @@
 - **DOF**: 6-DOF robot arm
 - **Language**: C (C17)
 - **Rationale for C over C++**: Zephyr-native (no `CONFIG_CPP` needed), slightly leaner binary, no C++ runtime overhead, simpler Zephyr API integration (no `extern "C"` guards), better fit for a solo-maintained embedded codebase. C modules with opaque structs + function prefixes replace C++ classes with zero overhead.
-- **Host connection**: USB-CDC serial (built-in on Atom Lite via USB-C)
+- **Host connection**: UART serial via CH340 USB-UART bridge
 
 ---
 
 ## TL;DR
 
-Build a layered C firmware stack on Zephyr RTOS targeting ESP32 (M5Stack Atom Lite). Layers: HAL → Servo Driver → Kinematics (FK/IK) → Trajectory Planner → Motion Controller → Host Command Interface. A clean host protocol over USB-CDC enables future ROS2 bridge without touching firmware.
+Build a layered C firmware stack on Zephyr RTOS targeting ESP32 (M5Stack Atom Lite). Layers: HAL → Servo Driver → Kinematics (FK/IK) → Trajectory Planner → Motion Controller → Host Command Interface. A clean host protocol over UART serial enables future ROS2 bridge without touching firmware.
 
 ---
 
@@ -32,7 +32,7 @@ Build a layered C firmware stack on Zephyr RTOS targeting ESP32 (M5Stack Atom Li
    │   │   ├── kinematics/    # FK, IK
    │   │   ├── trajectory/    # Trajectory planner
    │   │   ├── controller/    # Motion controller (joint PID)
-   │   │   └── comms/         # Host protocol (USB-CDC)
+    │   │   └── comms/         # Host protocol (UART serial)
    │   ├── include/
    │   ├── CMakeLists.txt
    │   └── prj.conf
@@ -43,8 +43,8 @@ Build a layered C firmware stack on Zephyr RTOS targeting ESP32 (M5Stack Atom Li
    │       └── m5stack_atom_lite.dts
    └── west.yml
    ```
-4. Configure `prj.conf`: enable `CONFIG_UART_INTERRUPT_DRIVEN`, `CONFIG_USB_CDC_ACM` (no C++ config needed)
-5. Verify a "hello world" builds and flashes (USB-CDC log output visible on host)
+4. Configure `prj.conf`: enable `CONFIG_UART_INTERRUPT_DRIVEN` (no C++ config needed)
+5. Verify a "hello world" builds and flashes (UART log output visible on host)
 
 ---
 
@@ -55,8 +55,8 @@ Build a layered C firmware stack on Zephyr RTOS targeting ESP32 (M5Stack Atom Li
    - Configurable baud rate (Feetech STS typically 1 Mbps)
    - Non-blocking TX with ISR-driven RX into a ring buffer
 7. Map GPIO assignment for Atom Lite:
-   - `UART1` (GPIO 26 TX / GPIO 32 RX) → servo bus (Grove port)
-   - `USB_CDC` (built-in) → host comms
+   - `UART1` (GPIO 21 TX / GPIO 25 RX) → servo bus (via UART-to-serial converter)
+    - `UART0` (via CH340 bridge) → host comms
    - Reserve GPIO 39 (button) for emergency stop
 8. Implement a microsecond-resolution timer utility using Zephyr `k_cycle_get_32()` for control loop timing
 

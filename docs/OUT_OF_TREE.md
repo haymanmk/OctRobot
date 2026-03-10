@@ -123,7 +123,7 @@ west update                     # Download Zephyr and dependencies
 ### Daily Development
 
 ```bash
-west build -b m5stack_atom_lite app
+west build -b m5stack_atom_lite/esp32/procpu app
 west flash
 west espressif monitor
 ```
@@ -134,7 +134,7 @@ Edit `west.yml`, change `revision: v3.6.0` to `revision: v3.7.0`, then:
 
 ```bash
 west update                     # Pull new Zephyr version
-west build -b m5stack_atom_lite app --pristine
+west build -b m5stack_atom_lite/esp32/procpu app --pristine
 ```
 
 ## Common Out-of-Tree Patterns
@@ -159,7 +159,7 @@ octrobot/
 └── boards/
 ```
 
-Build specific app: `west build -b m5stack_atom_lite bootloader/`
+Build specific app: `west build -b m5stack_atom_lite/esp32/procpu bootloader/`
 
 ### 3. With Custom Modules
 
@@ -181,7 +181,7 @@ octrobot/
 | **Git Repo** | Separate (octrobot.git) | Inside Zephyr |
 | **Custom Boards** | In your repo | PR to Zephyr |
 | **Zephyr Version** | You control | Use what's checked out |
-| **Build Command** | `west build -b m5stack_atom_lite app` | `west build -b m5stack_atom_lite` |
+| **Build Command** | `west build -b m5stack_atom_lite/esp32/procpu app` | `west build -b m5stack_atom_lite/esp32/procpu` |
 | **Use Case** | Production apps | Samples, testing |
 | **Zephyr Updates** | Explicit in west.yml | `git pull` |
 | **Onboarding** | Clone + west update | Clone entire Zephyr |

@@ -1,13 +1,13 @@
-/*
- * M5Stack Atom Lite Pin Control Configuration
- * Copyright (c) 2026 OctroBot Project
- *
- * SPDX-License-Identifier: Apache-2.0
- */
+/* Enable dedicated servo UART on Atom Lite (GPIO21 TX, GPIO25 RX). */
 
 #include <zephyr/dt-bindings/pinctrl/esp-pinctrl-common.h>
 #include <dt-bindings/pinctrl/esp32-pinctrl.h>
-#include <zephyr/dt-bindings/pinctrl/esp32-gpio.h>
+
+/ {
+	aliases {
+		servo-uart = &uart1;
+	};
+};
 
 &pinctrl {
 	uart1_default: uart1_default {
@@ -20,4 +20,11 @@
 			bias-pull-up;
 		};
 	};
+};
+
+&uart1 {
+	status = "okay";
+	current-speed = <1000000>;
+	pinctrl-0 = <&uart1_default>;
+	pinctrl-names = "default";
 };

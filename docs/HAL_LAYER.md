@@ -35,8 +35,8 @@ struct half_duplex_uart_config uart_config = {
 ```
 
 **Hardware Mapping:**
-- UART1 TX → GPIO 26 (Grove yellow wire)
-- UART1 RX → GPIO 32 (Grove white wire)
+- UART1 TX → GPIO 21 (to UART-to-serial converter)
+- UART1 RX → GPIO 25 (from UART-to-serial converter)
 
 ### 2. GPIO Utilities (`hal_gpio.h/.c`)
 
@@ -90,7 +90,7 @@ uint64_t elapsed = hal_timer_get_us() - start_time;
 
 ### Initialization Sequence
 
-1. Initialize USB CDC (if enabled)
+1. Use Zephyr UART console on UART0 (CH340 USB-UART bridge)
 2. Initialize timer subsystem
 3. Initialize GPIO (LED and button)
 4. Initialize UART for servo bus
@@ -133,7 +133,7 @@ OctroBot Robot Arm Firmware v0.2.0
 MCU: ESP32-PICO-D4 (M5Stack Atom Lite)
 RTOS: Zephyr RTOS v3.6.0
 ===========================================
-USB CDC ACM console enabled
+Console: UART0 via CH340 USB-UART bridge
 Initializing HAL layer...
 Timer initialized: 240000000 Hz (240 cycles/us, 240000 cycles/ms)
 LED GPIO initialized (GPIO 27)

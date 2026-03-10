@@ -7,6 +7,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
+#include <zephyr/devicetree.h>
 #include <zephyr/drivers/uart.h>
 #include <zephyr/logging/log.h>
 #include <string.h>
@@ -38,6 +39,35 @@ struct hal_uart_handle_s {
 
 /* Static instance (single UART for servos) */
 static struct hal_uart_handle_s uart_instance;
+
+static const struct device *resolve_uart_device(const char *device_name)
+{
+	const struct device *dev = NULL;
+
+	if (device_name) {
+		dev = device_get_binding(device_name);
+		if (dev) {
+			return dev;
+		}
+		LOG_WRN("UART device '%s' not found, trying devicetree fallbacks", device_name);
+	}
+
+#if DT_HAS_ALIAS(servo_uart) && DT_NODE_HAS_STATUS(DT_ALIAS(servo_uart), okay)
+	dev = DEVICE_DT_GET(DT_ALIAS(servo_uart));
+	if (device_is_ready(dev)) {
+		return dev;
+	}
+#endif
+
+#if DT_NODE_HAS_STATUS(DT_NODELABEL(uart1), okay)
+	dev = DEVICE_DT_GET(DT_NODELABEL(uart1));
+	if (device_is_ready(dev)) {
+		return dev;
+	}
+#endif
+
+	return NULL;
+}
 
 /* UART callback for interrupt-driven RX */
 static void uart_isr_callback(const struct device *dev, void *user_data)
@@ -73,7 +103,7 @@ static void uart_isr_callback(const struct device *dev, void *user_data)
 
 hal_uart_handle_t half_duplex_uart_init(const struct half_duplex_uart_config *config)
 {
-	if (!config || !config->device_name) {
+	if (!config) {
 		LOG_ERR("Invalid configuration");
 		return NULL;
 	}
@@ -85,10 +115,10 @@ hal_uart_handle_t half_duplex_uart_init(const struct half_duplex_uart_config *co
 		return handle;
 	}
 	
-	/* Get UART device */
-	handle->dev = device_get_binding(config->device_name);
+	/* Resolve UART from explicit device name or devicetree fallback. */
+	handle->dev = resolve_uart_device(config->device_name);
 	if (!handle->dev) {
-		LOG_ERR("UART device '%s' not found", config->device_name);
+		LOG_ERR("No usable UART device found for half-duplex bus");
 		return NULL;
 	}
 	
@@ -131,8 +161,8 @@ hal_uart_handle_t half_duplex_uart_init(const struct half_duplex_uart_config *co
 	
 	handle->initialized = true;
 	
-	LOG_INF("Half-duplex UART initialized: %s @ %u baud", 
-	        config->device_name, config->baudrate);
+	LOG_INF("Half-duplex UART initialized: %s @ %u baud",
+		handle->dev->name, config->baudrate);
 	
 	return handle;
 }

@@ -7,7 +7,7 @@
 - **Platform**: ESP32-PICO-D4 (dual-core @ 240MHz, 520KB SRAM, 4MB Flash)
 - **RTOS**: Zephyr RTOS v3.6.0
 - **Servo Control**: Feetech Serial Bus Servos (SCS/STS protocol)
-- **Communication**: USB-CDC for host interface
+- **Communication**: UART console via CH340 USB-UART bridge
 - **Architecture**: Layered C firmware (HAL → Drivers → Kinematics → Controller → Command Interface)
 
 ## Project Structure
@@ -67,7 +67,26 @@ pip install -r ~/.west/modules/zephyr/scripts/requirements.txt
 ### Building
 
 ```bash
-west build -b m5stack_atom_lite app
+west build -b m5stack_atom_lite/esp32/procpu app
+```
+
+### Dual-Core Target Selection
+
+ESP32 is dual-core, so Zephyr board targets require a core qualifier:
+
+- `m5stack_atom_lite/esp32/procpu` (recommended default for this project)
+- `m5stack_atom_lite/esp32/appcpu` (advanced/AMP use)
+
+For this firmware stack, use `PROCPU` unless you are intentionally building an AMP setup.
+
+Examples:
+
+```bash
+# Default (recommended)
+west build -b m5stack_atom_lite/esp32/procpu app
+
+# Alternate core (advanced)
+west build -b m5stack_atom_lite/esp32/appcpu app
 ```
 
 ### Flashing
@@ -94,24 +113,24 @@ screen /dev/ttyUSB0 115200
 - **Phase 4**: Kinematics (FK/IK)
 - **Phase 5**: Trajectory planner
 - **Phase 6**: Motion controller
-- **Phase 7**: Host command protocol (USB-CDC)
+- **Phase 7**: Host command protocol (UART serial)
 - **Phase 8**: Integration & testing
 
 ## Hardware Pinout
 
 | Function | GPIO | Notes |
 |----------|------|-------|
-| Servo Bus TX | 26 | Grove port (yellow) |
-| Servo Bus RX | 32 | Grove port (white) |
+| Servo Bus TX | 21 | To UART-to-serial converter |
+| Servo Bus RX | 25 | From UART-to-serial converter |
 | Status LED | 27 | WS2812B RGB LED |
 | Emergency Stop | 39 | Button (active-low) |
-| USB Console | - | USB-CDC virtual COM port |
+| USB Console | UART0 | CH340 USB-UART bridge |
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────┐
-│     Host Command Interface          │ ← USB-CDC Protocol
+│     Host Command Interface          │ ← UART Serial Protocol
 ├─────────────────────────────────────┤
 │      Motion Controller              │ ← 1ms control loop
 ├─────────────────────────────────────┤

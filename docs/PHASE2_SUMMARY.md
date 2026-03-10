@@ -126,8 +126,8 @@ void hal_timer_delay_ms(uint32_t ms)
 
 | Function | GPIO | Direction | Configuration |
 |----------|------|-----------|---------------|
-| UART1 TX (Servo) | 26 | Output | Grove yellow wire |
-| UART1 RX (Servo) | 32 | Input | Grove white wire, pull-up |
+| UART1 TX (Servo) | 21 | Output | To UART-to-serial converter |
+| UART1 RX (Servo) | 25 | Input | From UART-to-serial converter, pull-up |
 | Status LED | 27 | Output | WS2812B RGB |
 | Emergency Stop | 39 | Input | Active-low, pull-up, interrupt |
 
@@ -179,7 +179,7 @@ With HAL complete, Phase 3 will implement the Feetech servo driver:
 
 ```bash
 # From octrobot/ directory
-west build -b m5stack_atom_lite app
+west build -b m5stack_atom_lite/esp32/procpu app
 
 # Flash to device
 west flash

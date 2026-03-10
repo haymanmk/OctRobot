@@ -17,7 +17,7 @@
  * @brief Half-duplex UART configuration
  */
 struct half_duplex_uart_config {
-	const char *device_name;        /* Zephyr UART device name (e.g., "UART_1") */
+	const char *device_name;        /* Optional Zephyr UART device name (e.g., "UART_1") */
 	uint32_t baudrate;              /* Baud rate (e.g., 1000000 for 1 Mbps) */
 	uint32_t tx_timeout_ms;         /* Transmit timeout in milliseconds */
 	uint32_t rx_timeout_ms;         /* Receive timeout in milliseconds */

@@ -63,7 +63,11 @@ int hal_gpio_button_init(void)
 	}
 	
 	gpio_init_callback(&button_cb_data, button_pressed_isr, BIT(button.pin));
-	gpio_add_callback(button.dt_spec->port, &button_cb_data);
+	ret = gpio_add_callback(button.port, &button_cb_data);
+	if (ret != 0) {
+		LOG_ERR("Failed to add button callback: %d", ret);
+		return HAL_ERROR;
+	}
 	
 	LOG_INF("Button GPIO initialized (GPIO %d)", button.pin);
 	

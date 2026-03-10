@@ -280,10 +280,10 @@ Servo test complete
 ### Hardware Setup for Testing
 
 1. **Power**: Connect 6-12V power supply to servos
-2. **Communication**: Connect Grove port to servo bus
-   - GPIO 26 (TX) → Yellow wire
-   - GPIO 32 (RX) → White wire
-   - GND → Black wire
+2. **Communication**: Connect UART to servo bus via UART-to-serial converter
+   - GPIO 21 (TX) → Converter TX
+   - GPIO 25 (RX) → Converter RX
+   - GND → Common ground
 3. **Servo IDs**: Configure servos with IDs 1-6
 4. **Baud Rate**: Set servos to 1 Mbps (1000000 baud)
 

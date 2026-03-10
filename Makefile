@@ -1,7 +1,9 @@
 # Makefile wrapper for OctroBot firmware build commands
 # Simplifies common West operations
 
-BOARD ?= m5stack_atom_lite
+SOC ?= esp32
+CORE ?= procpu
+BOARD ?= m5stack_atom_lite/$(SOC)/$(CORE)
 APP_DIR ?= app
 BUILD_DIR ?= build
 
@@ -19,6 +21,8 @@ help:
 	@echo "  make all        - Build and flash"
 	@echo ""
 	@echo "Variables:"
+	@echo "  SOC=$(SOC)"
+	@echo "  CORE=$(CORE)"
 	@echo "  BOARD=$(BOARD)"
 	@echo "  APP_DIR=$(APP_DIR)"
 

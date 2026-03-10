@@ -111,7 +111,8 @@ int feetech_parse_packet(const uint8_t *buffer, size_t buffer_len,
 	}
 	
 	/* Verify checksum */
-	uint8_t received_checksum = buffer[4 + length];
+	/* Total packet bytes = 4 + length, checksum is the last byte. */
+	uint8_t received_checksum = buffer[expected_len - 1];
 	uint8_t calculated_checksum = feetech_calculate_checksum(packet->id, length,
 	                                                          packet->error,
 	                                                          packet->parameters,

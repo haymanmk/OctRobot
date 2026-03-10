@@ -13,7 +13,7 @@ The M5Stack Atom Lite is a compact ESP32-based development board featuring:
   - Wi-Fi 802.11 b/g/n
   - Bluetooth v4.2 BR/EDR and BLE
 - **I/O**:
-  - Grove port (GPIO 26, 32 - UART capable)
+  - Custom UART on GPIO 21 (TX), GPIO 25 (RX) for servo bus
   - WS2812B RGB LED (GPIO 27)
   - Button (GPIO 39)
 - **Power**: 5V via USB-C
@@ -22,18 +22,18 @@ The M5Stack Atom Lite is a compact ESP32-based development board featuring:
 
 | Function | GPIO | Notes |
 |----------|------|-------|
-| UART1 TX (Servo Bus) | 26 | Grove port, yellow wire |
-| UART1 RX (Servo Bus) | 32 | Grove port, white wire |
+| UART1 TX (Servo Bus) | 21 | To UART-to-serial converter |
+| UART1 RX (Servo Bus) | 25 | From UART-to-serial converter |
 | WS2812B RGB LED | 27 | Status indicator |
 | User Button | 39 | Emergency stop, active-low with pull-up |
-| USB CDC | - | Virtual COM port for host communication |
+| USB Console | UART0 | CH340 USB-UART virtual COM port |
 
 ## Programming
 
 Flash using esptool.py:
 
 ```bash
-west build -b m5stack_atom_lite app
+west build -b m5stack_atom_lite/esp32/procpu app
 west flash
 ```
 

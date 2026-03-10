@@ -10,7 +10,7 @@ Your OctroBot firmware project scaffold is ready!
 - `west.yml` - West manifest defining Zephyr v3.6.0 as dependency
 - `app/CMakeLists.txt` - Build configuration
 - `app/prj.conf` - Zephyr kernel configuration
-- `app/src/main.c` - Hello World with USB-CDC console
+- `app/src/main.c` - Hello World with UART console
 
 ### Board Definition
 - `boards/m5stack_atom_lite/` - Complete custom board support
@@ -73,7 +73,7 @@ Or use the provided setup script:
 ### Step 4: Build
 
 ```bash
-west build -b m5stack_atom_lite app
+west build -b m5stack_atom_lite/esp32/procpu app
 ```
 
 Expected output location: `build/zephyr/zephyr.bin`
@@ -113,7 +113,7 @@ OctroBot Robot Arm Firmware v0.1.0
 MCU: ESP32-PICO-D4 (M5Stack Atom Lite)
 RTOS: Zephyr RTOS v3.6.0
 ===========================================
-USB CDC ACM console enabled
+Console: UART0 via CH340 USB-UART bridge
 System initialization complete
 6-DOF robot arm ready
 Heartbeat: 0 seconds
@@ -146,6 +146,14 @@ Install Zephyr SDK with ESP32 support or set `ESPRESSIF_TOOLCHAIN_PATH`.
 - Verify port: `ls /dev/ttyUSB*` or `/dev/ttyACM*`
 - Try holding BOOT button during flash
 - Install udev rules for USB permissions
+
+### No USB console output
+- Ensure only one process owns the port: `lsof /dev/ttyUSB0`
+- Close VS Code serial monitor, `screen`, `minicom`, or any stale monitor before opening a new one
+- Use stable by-id path when monitoring:
+  - `west espressif monitor --port /dev/serial/by-id/usb-Hades2001_M5stack_81524BF67C-if00-port0`
+- If you still see only bootloader warnings about unsupported chip revision on older branches, set:
+  - `CONFIG_ESP32_USE_UNSUPPORTED_REVISION=y`
 
 ## What's Next? (Phase 2)
 

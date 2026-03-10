@@ -141,8 +141,8 @@ M5Stack Atom Lite:
 ┌─────────────────┐
 │    ESP32-PICO   │
 │                 │
-│  GPIO 26 ──────┼─→ UART TX (Yellow - Grove)
-│  GPIO 32 ──────┼─→ UART RX (White - Grove)
+│  GPIO 21 ──────┼─→ UART TX (to serial converter)
+│  GPIO 25 ──────┼─→ UART RX (from serial converter)
 │  GPIO 27 ──────┼─→ WS2812B LED
 │  GPIO 39 ──────┼─→ Button (Pull-up, active-low)
 │                 │

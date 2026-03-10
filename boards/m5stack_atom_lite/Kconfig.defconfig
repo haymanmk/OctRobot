@@ -7,10 +7,6 @@ if BOARD_M5STACK_ATOM_LITE
 config BOARD
 	default "m5stack_atom_lite"
 
-# USB CDC Console for host communication
-config USB_UART_CONSOLE
-	default y if USB_CDC_ACM
-
 # ESP32 specific configurations
 if SERIAL
 

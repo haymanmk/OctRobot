@@ -231,9 +231,10 @@ docs/
 
 **Connections Required:**
 - Servo power: 6-12V (separate from MCU)
-- UART TX (GPIO 26) → Servo bus yellow wire
-- UART RX (GPIO 32) → Servo bus white wire
-- GND → Servo bus black wire
+- UART TX (GPIO 21) → UART-to-serial converter TX
+- UART RX (GPIO 25) → UART-to-serial converter RX
+- Serial converter → Servo bus
+- GND → Common ground
 
 **Servo Configuration:**
 - IDs: 1-6 (for 6-DOF arm)
@@ -279,7 +280,7 @@ docs/
 
 **Compilation:**
 ```bash
-west build -b m5stack_atom_lite app
+west build -b m5stack_atom_lite/esp32/procpu app
 ```
 
 **Expected Build Output:**
