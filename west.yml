@@ -1,0 +1,24 @@
+# West manifest for OctroBot Robot Arm Firmware
+# This is an out-of-tree Zephyr application
+
+manifest:
+  version: "0.13"
+
+  # The "self" section defines this repository (octrobot) as the manifest repo
+  self:
+    path: octrobot
+
+  # Remote repositories
+  remotes:
+    - name: zephyrproject-rtos
+      url-base: https://github.com/zephyrproject-rtos
+
+  # Projects to fetch (Zephyr and its dependencies)
+  projects:
+    - name: zephyr
+      remote: zephyrproject-rtos
+      revision: v3.6.0
+      import: true
+
+  # Group configuration (optional)
+  group-filter: [-babblesim, -optional]

@@ -1,0 +1,29 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# Board default configuration
+
+if BOARD_M5STACK_ATOM_LITE
+
+config BOARD
+	default "m5stack_atom_lite"
+
+# USB CDC Console for host communication
+config USB_UART_CONSOLE
+	default y if USB_CDC_ACM
+
+# ESP32 specific configurations
+if SERIAL
+
+config UART_ESP32
+	default y
+
+endif # SERIAL
+
+if GPIO
+
+config GPIO_ESP32
+	default y
+
+endif # GPIO
+
+endif # BOARD_M5STACK_ATOM_LITE

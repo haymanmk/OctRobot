@@ -1,0 +1,44 @@
+# Zephyr build artifacts
+build/
+*.elf
+*.bin
+*.hex
+*.map
+
+# West workspace
+.west/
+bootloader/
+modules/
+tools/
+zephyr/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Compilation database
+compile_commands.json
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+
+# Environment
+.env

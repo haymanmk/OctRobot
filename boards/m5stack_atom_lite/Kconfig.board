@@ -1,0 +1,9 @@
+# SPDX-License-Identifier: Apache-2.0
+
+# M5Stack Atom Lite board configuration
+# Based on ESP32-PICO-D4 SoC
+
+config BOARD_M5STACK_ATOM_LITE
+	bool "M5Stack Atom Lite (ESP32-PICO-D4)"
+	depends on SOC_ESP32
+	select SOC_SERIES_ESP32
