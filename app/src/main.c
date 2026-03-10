@@ -15,6 +15,7 @@
 #include "half_duplex_uart.h"
 #include "hal_gpio.h"
 #include "hal_timer.h"
+#include "feetech_servo.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
@@ -28,6 +29,10 @@ static void emergency_stop_callback(void)
 	LOG_ERR("!!! EMERGENCY STOP ACTIVATED !!!");
 	
 	/* TODO Phase 6: Halt all motion, send stop commands to servos */
+	/* For now, disable torque on all servos */
+	for (uint8_t id = 1; id <= 6; id++) {
+		feetech_servo_set_torque_enable(id, false);
+	}
 }
 
 /* HAL initialization */
@@ -71,8 +76,85 @@ static int initialize_hal(void)
 	
 	hal_uart_handle_t servo_uart = half_duplex_uart_init(&uart_config);
 	if (!servo_uart) {
-		LOG_ERR("Failed to initialize servo UART");
-		return HAL_ERROR;
+	/* Initialize servo driver */
+	ret = feetech_servo_init(servo_uart);
+	if (ret != HAL_OK) {
+		LOG_ERR("Failed to initialize servo driver");
+		return ret;
+	}
+	
+	LOG_INF("HAL layer initialized successfully");
+	return HAL_OK;
+}
+
+/* Test servo communication */
+static void test_servos(void)
+{
+	LOG_INF("===============================3===========");
+	LOG_INF("Testing Servo Communication");
+	LOG_INF("===========================================");
+	
+	/* Expected servo IDs for 6-DOF arm */
+	uint8_t servo_ids[] = {1, 2, 3, 4, 5, 6};
+	uint8_t servo_count = 6;
+	
+	/* Ping each servo */
+	LOG_INF("Pinging servos...");
+	uint8_t detected_servos = 0;
+	for (uint8_t i = 0; i < servo_count; i++) {
+		int ret = feetech_servo_ping(servo_ids[i]);
+		if (ret == HAL_OK) {
+			LOG_INF("  Servo %d: OK", servo_ids[i]);
+			detected_servos++;
+		} else {
+			LOG_WRN("  Servo %d: No response", servo_ids[i]);
+		}
+		k_msleep(50); /* Small delay between pings */
+	}
+	
+	LOG_INF("Detected %d/%d servos", detected_servos, servo_count);
+	
+	if (detected_servos == 0) {
+		LOG_ERR("No servos detected! Check wiring and power.");
+		LOG_INF("  - Verify servos are powered (6-12V)");
+		LOG_INF("  - Check UART connections (GPIO 26=TX, GPIO 32=RX)");
+		LOG_INF("  - Confirm servo IDs are 1-6");
+		LOG_INF("  - Verify baud rate is 1 Mbps");
+		return;
+	}
+	
+	/* Read initial positions */
+	LOG_INF("Reading initial servo positions...");
+	for (uint8_t i = 0; i < servo_count; i++) {
+		uint16_t position;
+		int ret = feetech_servo_read_position(servo_ids[i], &position);
+		if (ret == HAL_OK) {
+			float angle = FEETECH_POS_TO_RAD(position);
+			LOG_INF("  Servo %d: position=%d (%.2f rad)", 
+			        servo_ids[i], position, (double)angle);
+		}
+		k_msleep(50);
+	}
+	
+	/* Read servo status */
+	LOG_INF("Reading servo status...");
+	for (uint8_t i = 0; i < servo_count; i++) {
+		struct feetech_servo_state state;
+		int ret = feetech_servo_read_state(servo_ids[i], &state);
+		if (ret == HAL_OK) {
+			LOG_INF("  Servo %d: temp=%d°C, voltage=%d.%dV, load=%d",
+			        servo_ids[i],
+			        state.present_temperature,
+			        state.present_voltage / 10,
+			        state.present_voltage % 10,
+			        state.present_load);
+		}
+		k_msleep(100);
+	}
+	
+	LOG_INF("===========================================");
+	LOG_INF("Servo test complete");
+	LOG_INF("===========================================")RROR;
 	}
 	
 	LOG_INF("HAL layer initialized successfully");
@@ -123,6 +205,10 @@ int main(void)
 	LOG_INF("System initialization complete");
 	LOG_INF("6-DOF robot arm ready");
 	LOG_INF("Press button (GPIO 39) for emergency stop");
+	
+	/* Test servo communication */
+	k_sleep(K_MSEC(500)); /* Brief delay before testing */
+	test_servos();
 
 	/* Main loop */
 	uint32_t counter = 0;

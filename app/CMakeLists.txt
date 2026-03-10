@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.20.0)
 # Find Zephyr. This also loads Zephyr's build system.
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 
-project(octrobot_firmware VERSION 0.1.0 LANGUAGES C)
+project(octrobot_firmware VERSION 0.3.0 LANGUAGES C)
 
 # Add application source files
 target_sources(app PRIVATE
@@ -24,11 +24,11 @@ target_sources(app PRIVATE
   src/hal/hal_timer.c
 )
 
-# Servo driver (to be added in Phase 3)
-# target_sources(app PRIVATE
-#   src/drivers/feetech_bus.c
-#   src/drivers/feetech_servo.c
-# )
+# Servo driver (Phase 3)
+target_sources(app PRIVATE
+  src/drivers/feetech_protocol.c
+  src/drivers/feetech_servo.c
+)
 
 # Kinematics (to be added in Phase 4)
 # target_sources(app PRIVATE

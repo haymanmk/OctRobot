@@ -90,7 +90,7 @@ screen /dev/ttyUSB0 115200
 
 - **Phase 1**: ✅ Project scaffold & toolchain setup
 - **Phase 2**: ✅ HAL layer (UART, GPIO, timers)
-- **Phase 3**: Feetech servo driver
+- **Phase 3**: ✅ Feetech servo driver
 - **Phase 4**: Kinematics (FK/IK)
 - **Phase 5**: Trajectory planner
 - **Phase 6**: Motion controller
@@ -140,6 +140,7 @@ Apache-2.0
 
 ---
 
-**Status**: Phase 2 complete - HAL layer functional
+**Status**: Phase 3 complete - Servo driver functional
 
 See [docs/HAL_LAYER.md](docs/HAL_LAYER.md) for HAL documentation.
+See [docs/SERVO_DRIVER.md](docs/SERVO_DRIVER.md) for servo driver documentation.
