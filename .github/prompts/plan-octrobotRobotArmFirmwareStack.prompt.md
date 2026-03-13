@@ -79,77 +79,150 @@ Build a layered C firmware stack on Zephyr RTOS targeting ESP32 (M5Stack Atom Li
 
 ---
 
+## Phase 3b — Early Manual Control Validation (Before Kinematics)
+
+**Purpose**: Test servo control, jogging, and demo recording early to validate hardware/driver before investing time in kinematics/trajectory. This provides confidence that joint-level control works correctly.
+
+13. Implement minimal USB-CDC packet parser (subset of Phase 7):
+    - Basic packet format: `[0xAA] [CMD] [PAYLOAD_LEN] [PAYLOAD...] [CRC8]`
+    - Implement only the commands below (defer trajectory and Cartesian commands)
+    - Simple blocking parser (no threading yet — sufficient for early testing)
+    
+14. Implement manual control commands:
+    - `0x20` JOG_JOINT — `[joint_id, direction, step_size_deg]` — incremental movement
+    - `0x21` SET_JOINT_DIRECT — `[joint_id, angle_rad]` — direct position command (bypass trajectory)
+    - `0x03` READ_STATE — return current joint angles only (6× float32)
+    - `0x22` START_READ_LOOP — stream joint positions at 100Hz
+    - `0x23` STOP_READ_LOOP — stop streaming
+    - `0x24` SINGLE_JOINT_TEST — `[joint_id, start, end, cycles]` — oscillate joint
+    - `0x04` STOP — emergency stop (hold current position)
+    
+15. Implement demo recording for early validation:
+    - `0x31` START_DEMO_RECORDING — `[demo_id]`
+    - `0x32` ADD_WAYPOINT — `[delay_ms]` — capture current joint angles
+    - `0x33` FINISH_DEMO_RECORDING — save to flash
+    - `0x30` PLAY_DEMO — `[demo_id]` — playback recorded waypoints (simple point-to-point, no trajectory smoothing yet)
+    - `0x34` CLEAR_DEMO — `[demo_id]` — erase demo
+    
+16. Write simple host Python script for testing:
+    - Open USB-CDC port, send/receive packets
+    - Interactive CLI: `jog 0 +5`, `set 1 0.5`, `record_demo`, `play_demo`
+    
+17. Validation tests:
+    - **Test 1**: Ping all 6 servos, verify all respond
+    - **Test 2**: Jog each joint individually (±1°, ±5°, ±10°)
+    - **Test 3**: Set all 6 joints to zero position via sync write
+    - **Test 4**: Stream positions for 10 seconds, verify no packet loss or corrupt data
+    - **Test 5**: Oscillate joint 0 between -30° and +30° for 10 cycles
+    - **Test 6**: Record 5-waypoint demo, playback, verify arm follows path
+    - **Test 7**: Emergency stop during motion, verify immediate halt
+    
+18. Document any issues found:
+    - Servo mechanical limits (may differ from spec)
+    - Communication timing issues (adjust baud rate or delays if needed)
+    - Flash write reliability
+    
+**Outcome**: Hardware validated, driver proven, safe to proceed to Phases 4-6 knowing joint control works.
+
+---
+
 ## Phase 4 — Kinematics Module
 
-13. Define robot geometry:
+19. Define robot geometry:
     - Store DH parameters (a, d, alpha, theta_offset) for all 6 joints as `const` arrays
     - Joint limits (min/max radians) per joint
-14. Implement `forward_kinematics_compute(joint_angles[6], out_transform)`:
+20. Implement `forward_kinematics_compute(joint_angles[6], out_transform)`:
     - Chain 6 homogeneous transform matrices using DH convention
     - Returns end-effector pose (position + rotation matrix)
-15. Implement `inverse_kinematics` — recommended approach: **analytical IK for 6-DOF spherical wrist** (joints 4-5-6 intersect at a point):
+21. Implement `inverse_kinematics` — recommended approach: **analytical IK for 6-DOF spherical wrist** (joints 4-5-6 intersect at a point):
     - Decouple: solve wrist center position (joints 1-3 geometrically), then solve wrist orientation (joints 4-6 analytically)
     - Return up to 8 solution candidates; select closest to current configuration
     - Return error code if target is unreachable
-16. Math dependencies: implement lightweight `mat4x4`, `vec3`, `quat` in `kinematics/math.h/.c` — **no external linear algebra library** to keep the footprint minimal
-17. Unit test kinematics offline on host PC (same C source files, compiled with gcc, no Zephyr dependency)
+22. Math dependencies: implement lightweight `mat4x4`, `vec3`, `quat` in `kinematics/math.h/.c` — **no external linear algebra library** to keep the footprint minimal
+23. Unit test kinematics offline on host PC (same C source files, compiled with gcc, no Zephyr dependency)
 
 ---
 
 ## Phase 5 — Trajectory Planner
 
-18. Implement `trajectory_point_t` struct: `{joint_angles[6], timestamp_ms}`
-19. Implement `joint_trajectory` module — trapezoidal velocity profile in joint space:
+24. Implement `trajectory_point_t` struct: `{joint_angles[6], timestamp_ms}`
+25. Implement `joint_trajectory` module — trapezoidal velocity profile in joint space:
     - Input: start angles, goal angles, max velocity, max acceleration (per joint)
     - Output: pre-computed array of `trajectory_point_t` at fixed 10ms interpolation steps
     - Enforces joint velocity and acceleration limits
-20. Implement `cartesian_trajectory` (optional, Phase 5b):
+26. Implement `cartesian_trajectory` (optional, Phase 5b):
     - Linear interpolation in Cartesian space, IK solved at each waypoint
     - Useful for straight-line end-effector paths
-21. Trajectory buffer: ring buffer stored in RAM, capacity ~200 points (~2s of motion at 10ms step)
+27. Trajectory buffer: ring buffer stored in RAM, capacity ~200 points (~2s of motion at 10ms step)
 
 ---
 
 ## Phase 6 — Motion Controller
 
-22. Implement `motion_controller` Zephyr thread (highest priority, 1ms period via `k_timer`):
+28. Implement `motion_controller` Zephyr thread (highest priority, 1ms period via `k_timer`):
     - Reads current joint positions via `SyncRead` (or staggered individual reads)
     - Fetches next `trajectory_point_t` from trajectory buffer
     - Computes joint position error
     - Sends `SyncWrite` goal positions to servo bus
     - Feetech STS servos have internal PID — outer loop sends position setpoints only (no torque control needed unless servos support it)
-23. Implement emergency stop: GPIO 39 (button) ISR disables motion, sends hold-position command to all servos
-24. Watchdog: if host comms silent for >500ms during teleoperation, auto-stop
+29. Implement emergency stop: GPIO 39 (button) ISR disables motion, sends hold-position command to all servos
+30. Watchdog: if host comms silent for >500ms during teleoperation, auto-stop
 
 ---
 
-## Phase 7 — Host Command Protocol (USB-CDC)
+## Phase 7 — Host Command Protocol (USB-CDC) & Manual Modes
 
-25. Define binary packet protocol over USB-CDC:
+31. Define binary packet protocol over USB-CDC:
     ```
     [0xAA] [CMD] [PAYLOAD_LEN(1B)] [PAYLOAD...] [CRC8]
     ```
-    Commands:
+    **Core Commands:**
     - `0x01` MOVE_JOINTS — target joint angles (6× float32) + duration_ms
     - `0x02` MOVE_CARTESIAN — target pose (x,y,z,rx,ry,rz) + duration_ms
     - `0x03` READ_STATE — request current joint angles + end-effector pose
     - `0x04` STOP — immediate halt
     - `0x05` HOME — move to defined home position
     - `0x10` SET_PARAMS — update speed/accel limits
-    - `0xF0` STATUS_REPORT — MCU→host: joint angles, temperatures, error flags
-26. Implement `host_comms` Zephyr thread (lower priority):
+    
+    **Manual/Debug Mode Commands:**
+    - `0x20` JOG_JOINT — `[joint_id, direction, step_size_deg]` — incremental joint movement (±1°, ±5°, ±10°)
+    - `0x21` SET_JOINT_DIRECT — `[joint_id, position]` — bypass trajectory planner, immediate servo command
+    - `0x22` START_READ_LOOP — stream all joint positions at 100Hz (debugging/monitoring)
+    - `0x23` STOP_READ_LOOP — stop continuous streaming
+    - `0x24` SINGLE_JOINT_TEST — `[joint_id, start_angle, end_angle, cycles]` — oscillate joint for testing
+    
+    **Demo Recording & Playback Commands:**
+    - `0x30` PLAY_DEMO — `[demo_id]` — play recorded demo sequence from flash
+    - `0x31` START_DEMO_RECORDING — `[demo_id]` — begin recording waypoints to specified demo slot (0-2)
+    - `0x32` ADD_WAYPOINT — `[delay_ms]` — capture current joint angles + time delay to next waypoint
+    - `0x33` FINISH_DEMO_RECORDING — save current demo to flash, mark as complete
+    - `0x34` CLEAR_DEMO — `[demo_id]` — erase stored demo from flash
+    
+    **Status Reports:**
+    - `0xF0` STATUS_REPORT — MCU→host: joint angles, temperatures, error flags (periodic at 50Hz)
+    - `0xF2` DEMO_RECORDING_STATUS — MCU→host: demo_id, waypoint count, bytes remaining
+    
+32. Implement `host_comms` Zephyr thread (lower priority):
     - Parses incoming packets, dispatches to controller/kinematics
-    - Sends periodic `STATUS_REPORT` at 50Hz
-27. CRC8 for packet integrity (Dallas/Maxim polynomial)
+    - Sends periodic `STATUS_REPORT` at 50Hz (or 100Hz in read loop mode)
+    - Command dispatcher with mode state machine (normal / jogging / test / demo / recording)
+33. CRC8 for packet integrity (Dallas/Maxim polynomial)
+34. Implement demo recording system (host-commanded):
+    - User jogs arm to desired positions using `JOG_JOINT` or `SET_JOINT_DIRECT`
+    - Host sends `START_DEMO_RECORDING [demo_id]` to begin capture
+    - At each waypoint, host sends `ADD_WAYPOINT [delay_ms]` to record current joint angles + time to next waypoint
+    - Host sends `FINISH_DEMO_RECORDING` to save to flash
+    - Store up to 3 demo sequences in flash (each max 50 waypoints @ 24 bytes = 1.2KB per demo, 3.6KB total)
+    - Flash layout: demo header (ID, waypoint_count, CRC) + waypoint array (6× float32 + uint32 delay_ms per waypoint)
 
 ---
 
 ## Phase 8 — Integration & Testing
 
-28. Integration test: send `MOVE_JOINTS` from host Python script → verify all 6 joints move to target
-29. Integration test: send `MOVE_CARTESIAN` → verify IK solution is valid and arm reaches pose
-30. Tune trajectory parameters (max vel/accel) for smooth, safe motion
-31. Stress test: continuous motion commands for 30 minutes, monitor servo temperatures
+35. Integration test: send `MOVE_JOINTS` from host Python script → verify all 6 joints move to target
+36. Integration test: send `MOVE_CARTESIAN` → verify IK solution is valid and arm reaches pose
+37. Tune trajectory parameters (max vel/accel) for smooth, safe motion
+38. Stress test: continuous motion commands for 30 minutes, monitor servo temperatures
 
 ---
 

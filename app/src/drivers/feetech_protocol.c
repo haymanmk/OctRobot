@@ -11,7 +11,7 @@
 
 #include "feetech_protocol.h"
 
-LOG_MODULE_REGISTER(feetech_protocol, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(feetech_protocol, LOG_LEVEL_WRN);
 
 uint8_t feetech_calculate_checksum(uint8_t id, uint8_t length, uint8_t instruction,
                                     const uint8_t *params, uint8_t param_len)

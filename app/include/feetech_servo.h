@@ -18,13 +18,14 @@
 #define FEETECH_POS_MAX      4095
 #define FEETECH_POS_CENTER   2048
 
-/* Convert between servo ticks and radians */
-#define FEETECH_POS_TO_RAD(pos)   (((float)(pos) - FEETECH_POS_CENTER) * (2.0f * 3.14159265f / 4096.0f))
-#define FEETECH_RAD_TO_POS(rad)   ((uint16_t)(((rad) * (4096.0f / (2.0f * 3.14159265f))) + FEETECH_POS_CENTER))
+/* Convert between servo ticks and degrees */
+#define FEETECH_POS_TO_DEG(pos)   (((float)(pos) - FEETECH_POS_CENTER) * (360.0f / 4096.0f))
+#define FEETECH_DEG_TO_POS(deg)   ((uint16_t)(((deg) * (4096.0f / 360.0f)) + FEETECH_POS_CENTER))
 
 /* Velocity range (typical for STS3215) */
 #define FEETECH_VEL_MIN      0
 #define FEETECH_VEL_MAX      4095
+#define FEETECH_DEFAULT_SPEED 1000  /* Default speed in steps/second (~50% max) */
 
 /* Maximum number of servos in robot */
 #define FEETECH_MAX_SERVOS   6
@@ -81,6 +82,10 @@ int feetech_servo_set_torque_enable(uint8_t id, bool enable);
 /**
  * @brief Set servo goal position (in ticks)
  *
+ * Sets goal position with default time (0 = immediate) and default speed
+ * (FEETECH_DEFAULT_SPEED = 2000 steps/second).
+ * Uses optimized 6-byte write per Feetech protocol (0x2A-0x2F).
+ *
  * @param id Servo ID
  * @param position Goal position (0-4095)
  * @return HAL_OK on success, error code otherwise
@@ -88,10 +93,25 @@ int feetech_servo_set_torque_enable(uint8_t id, bool enable);
 int feetech_servo_set_goal_position(uint8_t id, uint16_t position);
 
 /**
- * @brief Set servo goal position (in radians)
+ * @brief Set servo goal position with time and speed control (extended)
+ *
+ * Sets position, time, and speed in single 6-byte write to 0x2A-0x2F
+ * per Feetech protocol. More efficient than separate writes.
  *
  * @param id Servo ID
- * @param angle Goal angle in radians
+ * @param position Goal position (0-4095)
+ * @param time_ms Time to reach position in milliseconds (0 = immediate)
+ * @param speed Maximum speed during movement in steps/second (0 = no limit)
+ * @return HAL_OK on success, error code otherwise
+ */
+int feetech_servo_set_goal_position_ex(uint8_t id, uint16_t position,
+                                        uint16_t time_ms, uint16_t speed);
+
+/**
+ * @brief Set servo goal position (in degrees)
+ *
+ * @param id Servo ID
+ * @param angle Goal angle in degrees (-180 to +180)
  * @return HAL_OK on success, error code otherwise
  */
 int feetech_servo_set_goal_angle(uint8_t id, float angle);
@@ -133,10 +153,10 @@ int feetech_servo_set_acceleration(uint8_t id, uint8_t acceleration);
 int feetech_servo_read_position(uint8_t id, uint16_t *position);
 
 /**
- * @brief Read servo current position (in radians)
+ * @brief Read servo current position (in degrees)
  *
  * @param id Servo ID
- * @param angle Pointer to store angle in radians
+ * @param angle Pointer to store angle in degrees
  * @return HAL_OK on success, error code otherwise
  */
 int feetech_servo_read_angle(uint8_t id, float *angle);
@@ -192,10 +212,10 @@ int feetech_servo_sync_write_positions(const uint8_t *ids, const uint16_t *posit
                                         uint8_t count);
 
 /**
- * @brief Synchronized write - set goal angles for multiple servos (radians)
+ * @brief Synchronized write - set goal angles for multiple servos (degrees)
  *
  * @param ids Array of servo IDs
- * @param angles Array of goal angles in radians
+ * @param angles Array of goal angles in degrees
  * @param count Number of servos (max FEETECH_MAX_SERVOS)
  * @return HAL_OK on success, error code otherwise
  */

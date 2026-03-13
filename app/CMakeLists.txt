@@ -30,6 +30,12 @@ target_sources(app PRIVATE
   src/drivers/feetech_servo.c
 )
 
+# Host communications (Phase 3b)
+target_sources(app PRIVATE
+  src/comms/packet_protocol.c
+  src/comms/host_comms.c
+)
+
 # Kinematics (to be added in Phase 4)
 # target_sources(app PRIVATE
 #   src/kinematics/math.c

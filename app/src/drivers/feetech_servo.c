@@ -69,7 +69,21 @@ int feetech_servo_set_goal_position(uint8_t id, uint16_t position)
 		position = FEETECH_POS_MAX;
 	}
 	
-	int ret = feetech_write_word(servo_uart, id, FEETECH_REG_GOAL_POSITION_L, position);
+	/* 
+	 * According to Feetech protocol, write 6 consecutive bytes to 0x2A-0x2F:
+	 * - Position (2 bytes at 0x2A-0x2B)
+	 * - Time (2 bytes at 0x2C-0x2D) - set to 0 for immediate movement
+	 * - Speed (2 bytes at 0x2E-0x2F) - default speed in steps/second
+	 */
+	uint8_t params[6];
+	params[0] = position & 0xFF;                         /* Position low byte */
+	params[1] = (position >> 8) & 0xFF;                  /* Position high byte */
+	params[2] = 0;                                        /* Time low byte (0 = immediate) */
+	params[3] = 0;                                        /* Time high byte */
+	params[4] = FEETECH_DEFAULT_SPEED & 0xFF;            /* Speed low byte */
+	params[5] = (FEETECH_DEFAULT_SPEED >> 8) & 0xFF;     /* Speed high byte */
+	
+	int ret = feetech_write(servo_uart, id, FEETECH_REG_GOAL_POSITION_L, params, 6);
 	
 	if (ret == HAL_OK) {
 		LOG_DBG("Servo %d goal position: %d", id, position);
@@ -80,7 +94,7 @@ int feetech_servo_set_goal_position(uint8_t id, uint16_t position)
 
 int feetech_servo_set_goal_angle(uint8_t id, float angle)
 {
-	uint16_t position = FEETECH_RAD_TO_POS(angle);
+	uint16_t position = FEETECH_DEG_TO_POS(angle);
 	return feetech_servo_set_goal_position(id, position);
 }
 
@@ -116,6 +130,48 @@ int feetech_servo_set_acceleration(uint8_t id, uint8_t acceleration)
 	return feetech_write(servo_uart, id, FEETECH_REG_ACCELERATION, &acceleration, 1);
 }
 
+int feetech_servo_set_goal_position_ex(uint8_t id, uint16_t position, 
+                                        uint16_t time_ms, uint16_t speed)
+{
+	if (!servo_uart) {
+		return HAL_ERROR;
+	}
+	
+	/* Clamp position to valid range */
+	if (position > FEETECH_POS_MAX) {
+		LOG_WRN("Position %d exceeds max, clamping to %d", position, FEETECH_POS_MAX);
+		position = FEETECH_POS_MAX;
+	}
+	
+	/* Clamp speed to valid range */
+	if (speed > FEETECH_VEL_MAX) {
+		LOG_WRN("Speed %d exceeds max, clamping to %d", speed, FEETECH_VEL_MAX);
+		speed = FEETECH_VEL_MAX;
+	}
+	
+	/* 
+	 * Write 6 consecutive bytes to 0x2A-0x2F per Feetech protocol:
+	 * - Position (2 bytes at 0x2A-0x2B)
+	 * - Time (2 bytes at 0x2C-0x2D)
+	 * - Speed (2 bytes at 0x2E-0x2F)
+	 */
+	uint8_t params[6];
+	params[0] = position & 0xFF;        /* Position low byte */
+	params[1] = (position >> 8) & 0xFF; /* Position high byte */
+	params[2] = time_ms & 0xFF;         /* Time low byte */
+	params[3] = (time_ms >> 8) & 0xFF;  /* Time high byte */
+	params[4] = speed & 0xFF;           /* Speed low byte */
+	params[5] = (speed >> 8) & 0xFF;    /* Speed high byte */
+	
+	int ret = feetech_write(servo_uart, id, FEETECH_REG_GOAL_POSITION_L, params, 6);
+	
+	if (ret == HAL_OK) {
+		LOG_DBG("Servo %d goal: pos=%d, time=%dms, speed=%d", id, position, time_ms, speed);
+	}
+	
+	return ret;
+}
+
 int feetech_servo_read_position(uint8_t id, uint16_t *position)
 {
 	if (!servo_uart || !position) {
@@ -135,7 +191,7 @@ int feetech_servo_read_angle(uint8_t id, float *angle)
 	int ret = feetech_servo_read_position(id, &position);
 	
 	if (ret == HAL_OK) {
-		*angle = FEETECH_POS_TO_RAD(position);
+		*angle = FEETECH_POS_TO_DEG(position);
 	}
 	
 	return ret;
@@ -236,14 +292,23 @@ int feetech_servo_sync_write_positions(const uint8_t *ids, const uint16_t *posit
 		return HAL_INVALID;
 	}
 	
-	/* Pack position data (little-endian uint16_t) */
-	uint8_t data[FEETECH_MAX_SERVOS * 2];
+	/* 
+	 * Pack 6 bytes per servo per Feetech protocol (0x2A-0x2F):
+	 * - Position (2 bytes)
+	 * - Time (2 bytes, 0 = immediate)
+	 * - Speed (2 bytes, default speed in steps/second)
+	 */
+	uint8_t data[FEETECH_MAX_SERVOS * 6];
 	for (uint8_t i = 0; i < count; i++) {
-		data[i * 2] = (uint8_t)(positions[i] & 0xFF);
-		data[i * 2 + 1] = (uint8_t)((positions[i] >> 8) & 0xFF);
+		data[i * 6 + 0] = (uint8_t)(positions[i] & 0xFF);                /* Position low */
+		data[i * 6 + 1] = (uint8_t)((positions[i] >> 8) & 0xFF);         /* Position high */
+		data[i * 6 + 2] = 0;                                              /* Time low (0 = immediate) */
+		data[i * 6 + 3] = 0;                                              /* Time high */
+		data[i * 6 + 4] = FEETECH_DEFAULT_SPEED & 0xFF;                  /* Speed low */
+		data[i * 6 + 5] = (FEETECH_DEFAULT_SPEED >> 8) & 0xFF;           /* Speed high */
 	}
 	
-	int ret = feetech_sync_write(servo_uart, FEETECH_REG_GOAL_POSITION_L, 2,
+	int ret = feetech_sync_write(servo_uart, FEETECH_REG_GOAL_POSITION_L, 6,
 	                              ids, data, count);
 	
 	if (ret == HAL_OK) {
@@ -267,7 +332,7 @@ int feetech_servo_sync_write_angles(const uint8_t *ids, const float *angles,
 	/* Convert angles to positions */
 	uint16_t positions[FEETECH_MAX_SERVOS];
 	for (uint8_t i = 0; i < count; i++) {
-		positions[i] = FEETECH_RAD_TO_POS(angles[i]);
+		positions[i] = FEETECH_DEG_TO_POS(angles[i]);
 	}
 	
 	return feetech_servo_sync_write_positions(ids, positions, count);

@@ -6,6 +6,10 @@ CORE ?= procpu
 BOARD ?= m5stack_atom_lite/$(SOC)/$(CORE)
 APP_DIR ?= app
 BUILD_DIR ?= build
+ZEPHYR_VENV ?= $(HOME)/zephyrproject/.venv
+
+# Activate virtual environment for all west commands
+WEST := . $(ZEPHYR_VENV)/bin/activate && west
 
 .PHONY: help build flash clean pristine menuconfig monitor setup
 
@@ -31,19 +35,19 @@ setup:
 	@./setup.sh
 
 build:
-	west build -b $(BOARD) $(APP_DIR)
+	$(WEST) build -b $(BOARD) $(APP_DIR)
 
 flash:
-	west flash
+	$(WEST) flash
 
 clean:
-	west build -t clean
+	$(WEST) build -t clean
 
 pristine:
 	rm -rf $(BUILD_DIR)
 
 menuconfig:
-	west build -t menuconfig
+	$(WEST) build -t menuconfig
 
 monitor:
 	@echo "Opening serial monitor (Ctrl+A, K, Y to exit)..."

@@ -14,7 +14,7 @@
 
 #include "half_duplex_uart.h"
 
-LOG_MODULE_REGISTER(half_duplex_uart, LOG_LEVEL_DBG);
+LOG_MODULE_REGISTER(half_duplex_uart, LOG_LEVEL_WRN);
 
 #define RX_RING_BUFFER_SIZE 256
 

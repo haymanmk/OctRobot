@@ -15,6 +15,7 @@
 #include "hal_gpio.h"
 #include "hal_timer.h"
 #include "half_duplex_uart.h"
+#include "host_comms.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
@@ -125,8 +126,8 @@ static void test_servos(void)
 		uint16_t position = 0;
 		int ret = feetech_servo_read_position(servo_ids[i], &position);
 		if (ret == HAL_OK) {
-			float angle = FEETECH_POS_TO_RAD(position);
-			LOG_INF("  Servo %d: position=%d (%.2f rad)", servo_ids[i], position,
+			float angle = FEETECH_POS_TO_DEG(position);
+			LOG_INF("  Servo %d: position=%d (%.2f deg)", servo_ids[i], position,
 				(double)angle);
 		}
 		k_msleep(50);
@@ -175,24 +176,59 @@ int main(void)
 	k_sleep(K_MSEC(500));
 	test_servos();
 
+	/* Initialize host communication */
+	ret = host_comms_init();
+	if (ret == 0) {
+		LOG_INF("Host communication initialized");
+		LOG_INF("Connect via USB serial to send commands");
+	} else {
+		LOG_WRN("Host communication init failed: %d", ret);
+		LOG_INF("Continuing without host control...");
+	}
+
 	uint32_t counter = 0;
 	uint64_t last_time_us = hal_timer_get_us();
 
+	LOG_INF("");
+	LOG_INF("===========================================");
+	LOG_INF("Entering main loop - Phase 3b Manual Control");
+	LOG_INF("===========================================");
+	LOG_INF("Send commands via USB serial to control robot");
+	LOG_INF("Available commands:");
+	LOG_INF("  - JOG_JOINT: Move joints incrementally");
+	LOG_INF("  - SET_JOINT_DIRECT: Direct position control");
+	LOG_INF("  - READ_STATE: Get current joint angles");
+	LOG_INF("  - DEMO Recording: Record and playback motions");
+	LOG_INF("===========================================");
+	LOG_INF("");
+
 	while (1) {
+		/* Process host commands (non-blocking, should be called frequently) */
+		host_comms_process(0);
+
 		uint64_t current_time_us = hal_timer_get_us();
 		uint64_t elapsed_us = current_time_us - last_time_us;
-		last_time_us = current_time_us;
 
-		LOG_INF("Heartbeat: %u sec (loop time: %llu us)", counter,
-			(unsigned long long)elapsed_us);
-		hal_gpio_led_set(counter % 2);
+		/* Heartbeat log at reduced frequency - suppress when in manual control mode */
+		if (elapsed_us >= 10000000) {  /* 10 seconds */
+			last_time_us = current_time_us;
+			
+			/* Only log heartbeat if NOT in manual control mode */
+			if (!host_comms_is_manual_mode()) {
+				LOG_INF("Heartbeat: %u (10s)", counter);
+			}
+			
+			/* Always toggle LED */
+			hal_gpio_led_set(counter % 2);
 
-		if (emergency_stop_active) {
-			LOG_WRN("System halted - emergency stop active");
+			if (emergency_stop_active) {
+				LOG_WRN("System halted - emergency stop active");
+			}
+			counter++;
 		}
 
-		counter++;
-		k_sleep(K_SECONDS(2));
+		/* Small delay to prevent busy-waiting, but fast enough for responsive commands */
+		k_sleep(K_USEC(100)); /* 100 microseconds = 0.0001 seconds */
 	}
 
 	return 0;
