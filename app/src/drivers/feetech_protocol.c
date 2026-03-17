@@ -13,7 +13,7 @@
 
 LOG_MODULE_REGISTER(feetech_protocol, LOG_LEVEL_WRN);
 
-uint8_t feetech_calculate_checksum(uint8_t id, uint8_t length, uint8_t instruction,
+uint8_t feetech_protocol_calculate_checksum(uint8_t id, uint8_t length, uint8_t instruction,
                                     const uint8_t *params, uint8_t param_len)
 {
 	uint8_t sum = id + length + instruction;
@@ -25,7 +25,7 @@ uint8_t feetech_calculate_checksum(uint8_t id, uint8_t length, uint8_t instructi
 	return ~sum & 0xFF;
 }
 
-int feetech_build_packet(const struct feetech_packet *packet, uint8_t *buffer,
+int feetech_protocol_build_packet(const struct feetech_packet *packet, uint8_t *buffer,
                          size_t buffer_size)
 {
 	if (!packet || !buffer) {
@@ -55,7 +55,7 @@ int feetech_build_packet(const struct feetech_packet *packet, uint8_t *buffer,
 	}
 	
 	/* Calculate and append checksum */
-	uint8_t checksum = feetech_calculate_checksum(packet->id,
+	uint8_t checksum = feetech_protocol_calculate_checksum(packet->id,
 	                                               packet->param_length + 2,
 	                                               packet->instruction,
 	                                               packet->parameters,
@@ -68,7 +68,7 @@ int feetech_build_packet(const struct feetech_packet *packet, uint8_t *buffer,
 	return (int)packet_len;
 }
 
-int feetech_parse_packet(const uint8_t *buffer, size_t buffer_len,
+int feetech_protocol_parse_packet(const uint8_t *buffer, size_t buffer_len,
                          struct feetech_packet *packet)
 {
 	if (!buffer || !packet || buffer_len < FEETECH_MIN_PACKET_SIZE) {
@@ -113,7 +113,7 @@ int feetech_parse_packet(const uint8_t *buffer, size_t buffer_len,
 	/* Verify checksum */
 	/* Total packet bytes = 4 + length, checksum is the last byte. */
 	uint8_t received_checksum = buffer[expected_len - 1];
-	uint8_t calculated_checksum = feetech_calculate_checksum(packet->id, length,
+	uint8_t calculated_checksum = feetech_protocol_calculate_checksum(packet->id, length,
 	                                                          packet->error,
 	                                                          packet->parameters,
 	                                                          packet->param_length);
@@ -135,7 +135,7 @@ int feetech_parse_packet(const uint8_t *buffer, size_t buffer_len,
 	return HAL_OK;
 }
 
-int feetech_ping(hal_uart_handle_t uart, uint8_t id)
+int feetech_protocol_ping(hal_uart_handle_t uart, uint8_t id)
 {
 	if (!uart) {
 		return HAL_INVALID;
@@ -151,7 +151,7 @@ int feetech_ping(hal_uart_handle_t uart, uint8_t id)
 	};
 	
 	uint8_t tx_buffer[FEETECH_MIN_PACKET_SIZE];
-	int len = feetech_build_packet(&tx_packet, tx_buffer, sizeof(tx_buffer));
+	int len = feetech_protocol_build_packet(&tx_packet, tx_buffer, sizeof(tx_buffer));
 	if (len < 0) {
 		return len;
 	}
@@ -177,7 +177,7 @@ int feetech_ping(hal_uart_handle_t uart, uint8_t id)
 	
 	/* Parse response */
 	struct feetech_packet rx_packet;
-	ret = feetech_parse_packet(rx_buffer, ret, &rx_packet);
+	ret = feetech_protocol_parse_packet(rx_buffer, ret, &rx_packet);
 	if (ret != HAL_OK) {
 		return ret;
 	}
@@ -191,7 +191,7 @@ int feetech_ping(hal_uart_handle_t uart, uint8_t id)
 	return HAL_OK;
 }
 
-int feetech_read(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
+int feetech_protocol_read(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
                  uint8_t length, uint8_t *data)
 {
 	if (!uart || !data) {
@@ -210,7 +210,7 @@ int feetech_read(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
 	tx_packet.parameters[1] = length;
 	
 	uint8_t tx_buffer[FEETECH_MIN_PACKET_SIZE + 2];
-	int len = feetech_build_packet(&tx_packet, tx_buffer, sizeof(tx_buffer));
+	int len = feetech_protocol_build_packet(&tx_packet, tx_buffer, sizeof(tx_buffer));
 	if (len < 0) {
 		return len;
 	}
@@ -232,7 +232,7 @@ int feetech_read(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
 	
 	/* Parse response */
 	struct feetech_packet rx_packet;
-	ret = feetech_parse_packet(rx_buffer, ret, &rx_packet);
+	ret = feetech_protocol_parse_packet(rx_buffer, ret, &rx_packet);
 	if (ret != HAL_OK) {
 		return ret;
 	}
@@ -254,7 +254,7 @@ int feetech_read(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
 	return HAL_OK;
 }
 
-int feetech_write(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
+int feetech_protocol_write(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
                   const uint8_t *data, uint8_t length)
 {
 	if (!uart || !data) {
@@ -273,7 +273,7 @@ int feetech_write(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
 	memcpy(&tx_packet.parameters[1], data, length);
 	
 	uint8_t tx_buffer[FEETECH_MAX_PACKET_SIZE];
-	int len = feetech_build_packet(&tx_packet, tx_buffer, sizeof(tx_buffer));
+	int len = feetech_protocol_build_packet(&tx_packet, tx_buffer, sizeof(tx_buffer));
 	if (len < 0) {
 		return len;
 	}
@@ -298,7 +298,7 @@ int feetech_write(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
 	
 	/* Parse response */
 	struct feetech_packet rx_packet;
-	ret = feetech_parse_packet(rx_buffer, ret, &rx_packet);
+	ret = feetech_protocol_parse_packet(rx_buffer, ret, &rx_packet);
 	if (ret != HAL_OK) {
 		return ret;
 	}
@@ -311,7 +311,7 @@ int feetech_write(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
 	return HAL_OK;
 }
 
-int feetech_sync_write(hal_uart_handle_t uart, uint8_t reg_addr, uint8_t data_len,
+int feetech_protocol_sync_write(hal_uart_handle_t uart, uint8_t reg_addr, uint8_t data_len,
                        const uint8_t *servo_ids, const uint8_t *servo_data,
                        uint8_t servo_count)
 {
@@ -342,7 +342,7 @@ int feetech_sync_write(hal_uart_handle_t uart, uint8_t reg_addr, uint8_t data_le
 	}
 	
 	uint8_t tx_buffer[FEETECH_MAX_PACKET_SIZE];
-	int len = feetech_build_packet(&tx_packet, tx_buffer, sizeof(tx_buffer));
+	int len = feetech_protocol_build_packet(&tx_packet, tx_buffer, sizeof(tx_buffer));
 	if (len < 0) {
 		return len;
 	}
@@ -358,7 +358,7 @@ int feetech_sync_write(hal_uart_handle_t uart, uint8_t reg_addr, uint8_t data_le
 	return HAL_OK;
 }
 
-int feetech_read_word(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
+int feetech_protocol_read_word(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
                       uint16_t *value)
 {
 	if (!value) {
@@ -366,7 +366,7 @@ int feetech_read_word(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
 	}
 	
 	uint8_t data[2];
-	int ret = feetech_read(uart, id, reg_addr, 2, data);
+	int ret = feetech_protocol_read(uart, id, reg_addr, 2, data);
 	if (ret != HAL_OK) {
 		return ret;
 	}
@@ -377,7 +377,7 @@ int feetech_read_word(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
 	return HAL_OK;
 }
 
-int feetech_write_word(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
+int feetech_protocol_write_word(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
                        uint16_t value)
 {
 	/* Little-endian */
@@ -386,5 +386,5 @@ int feetech_write_word(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
 		(uint8_t)((value >> 8) & 0xFF),
 	};
 	
-	return feetech_write(uart, id, reg_addr, data, 2);
+	return feetech_protocol_write(uart, id, reg_addr, data, 2);
 }

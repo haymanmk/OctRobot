@@ -16,7 +16,7 @@
 
 LOG_MODULE_REGISTER(half_duplex_uart, LOG_LEVEL_WRN);
 
-#define RX_RING_BUFFER_SIZE 256
+#define RX_RING_BUFFER_SIZE	512 
 
 /* Half-duplex UART instance structure */
 struct hal_uart_handle_s {

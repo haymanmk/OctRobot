@@ -198,6 +198,17 @@ int feetech_servo_read_voltage(uint8_t id, uint8_t *voltage);
 int feetech_servo_read_state(uint8_t id, struct feetech_servo_state *state);
 
 /**
+ * @brief Read states of multiple servos
+ *
+ * @param ids Array of servo IDs
+ * @param states Array of state structures to fill
+ * @param count Number of servos (max FEETECH_MAX_SERVOS)
+ * @return HAL_OK on success, error code otherwise
+ */
+int feetech_servo_read_multi_states(const uint8_t *ids, struct feetech_servo_state *states,
+									uint8_t count);
+
+/**
  * @brief Synchronized write - set goal positions for multiple servos
  *
  * Sends goal positions to all servos in a single packet for coordinated motion.

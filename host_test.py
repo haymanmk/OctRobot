@@ -11,7 +11,7 @@ Usage:
 Commands:
     ping              - Test servos
     jog <id> <dir> <deg>  - Jog joint (dir: +1/-1, deg: 1/5/10)
-    set <id> <angle>  - Set joint angle in radians
+    set <id> <angle>  - Set joint angle in degrees
     read              - Read current joint state
     loop              - Start continuous read loop (100Hz)
     stop_loop         - Stop read loop
@@ -164,7 +164,7 @@ class OctrobotHost:
             time.sleep(0.001)
         
         if len(buffer) > 0:
-            print(f"Warning: Received {len(buffer)} bytes but no valid packet: {buffer.hex()}")
+            print(f"Warning: Received {len(buffer)} bytes but no valid packet: {buffer}")
         return None
         
     def cmd_jog_joint(self, joint_id: int, direction: int, step_deg: int) -> None:
@@ -172,9 +172,9 @@ class OctrobotHost:
         payload = struct.pack('BBB', joint_id, direction & 0xFF, step_deg)
         self.send_command(CMD_JOG_JOINT, payload)
         
-    def cmd_set_joint_direct(self, joint_id: int, angle_rad: float) -> None:
-        """Set joint to specific angle (bypass trajectory)."""
-        payload = struct.pack('Bf', joint_id, angle_rad)
+    def cmd_set_joint_direct(self, joint_id: int, angle_deg: float) -> None:
+        """Set joint to specific angle in degrees (bypass trajectory)."""
+        payload = struct.pack('Bf', joint_id, angle_deg)
         self.send_command(CMD_SET_JOINT_DIRECT, payload)
         
     def cmd_read_state(self) -> None:
@@ -211,9 +211,9 @@ class OctrobotHost:
         self.send_command(CMD_STOP_READ_LOOP)
         print("Read loop stopped")
         
-    def cmd_single_joint_test(self, joint_id: int, start_rad: float, end_rad: float, cycles: int) -> None:
-        """Oscillate a single joint for testing."""
-        payload = struct.pack('Bffb', joint_id, start_rad, end_rad, cycles)
+    def cmd_single_joint_test(self, joint_id: int, start_deg: float, end_deg: float, cycles: int) -> None:
+        """Oscillate a single joint for testing (angles in degrees)."""
+        payload = struct.pack('Bffb', joint_id, start_deg, end_deg, cycles)
         self.send_command(CMD_SINGLE_JOINT_TEST, payload)
         print(f"Testing joint {joint_id} for {cycles} cycles...")
         
@@ -281,7 +281,7 @@ class OctrobotHost:
         
         print("\n--- Robot State ---")
         for i in range(6):
-            print(f"Joint {i+1}: {angles[i]:7.3f} rad ({angles[i]*180/3.14159:6.1f}°)  "
+            print(f"Joint {i+1}: {angles[i]:7.2f}° ({angles[i]*3.14159/180:6.3f} rad)  "
                   f"Temp: {temps[i]:3d}°C  V: {voltages[i]/10:.1f}V  Load: {loads[i]:5d}")
         print(f"Moving: {'YES' if is_moving else 'NO'}  Errors: 0x{error_flags:02X}")
         print("-------------------\n")
@@ -308,8 +308,8 @@ def interactive_cli(host: OctrobotHost):
                 host.cmd_jog_joint(joint_id, direction, step_deg)
             elif cmd[0] == 'set' and len(cmd) >= 3:
                 joint_id = int(cmd[1])
-                angle_rad = float(cmd[2])
-                host.cmd_set_joint_direct(joint_id, angle_rad)
+                angle_deg = float(cmd[2])
+                host.cmd_set_joint_direct(joint_id, angle_deg)
             elif cmd[0] == 'read':
                 host.cmd_read_state()
             elif cmd[0] == 'loop':
@@ -318,10 +318,10 @@ def interactive_cli(host: OctrobotHost):
                 host.cmd_stop_read_loop()
             elif cmd[0] == 'test' and len(cmd) >= 5:
                 joint_id = int(cmd[1])
-                start_rad = float(cmd[2])
-                end_rad = float(cmd[3])
+                start_deg = float(cmd[2])
+                end_deg = float(cmd[3])
                 cycles = int(cmd[4])
-                host.cmd_single_joint_test(joint_id, start_rad, end_rad, cycles)
+                host.cmd_single_joint_test(joint_id, start_deg, end_deg, cycles)
             elif cmd[0] == 'stop':
                 host.cmd_stop()
             elif cmd[0] == 'record' and len(cmd) >= 2:

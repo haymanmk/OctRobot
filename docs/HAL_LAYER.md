@@ -40,11 +40,10 @@ struct half_duplex_uart_config uart_config = {
 
 ### 2. GPIO Utilities (`hal_gpio.h/.c`)
 
-Manages GPIO peripherals including button and LED.
+Manages GPIO peripherals including the emergency stop button.
 
 **Features:**
 - Emergency stop button with interrupt
-- Status LED control
 - Callback support for button events
 
 **API:**
@@ -52,49 +51,19 @@ Manages GPIO peripherals including button and LED.
 int hal_gpio_button_init(void);
 bool hal_gpio_button_is_pressed(void);
 int hal_gpio_button_set_callback(void (*callback)(void));
-
-int hal_gpio_led_init(void);
-int hal_gpio_led_set(bool on);
 ```
 
 **Hardware Mapping:**
 - Button (sw0) → GPIO 39 (emergency stop, active-low with pull-up)
-- LED (led0) → GPIO 27 (WS2812B RGB LED - simple on/off only)
-
-### 3. Timer Utilities (`hal_timer.h/.c`)
-
-Provides microsecond-resolution timing for control loops.
-
-**Features:**
-- Microsecond and millisecond timestamps
-- High-resolution delays
-- Based on Zephyr cycle counter (k_cycle_get_64)
-
-**API:**
-```c
-int hal_timer_init(void);
-uint64_t hal_timer_get_us(void);
-uint64_t hal_timer_get_ms(void);
-void hal_timer_delay_us(uint32_t us);
-void hal_timer_delay_ms(uint32_t ms);
-```
-
-**Usage Example:**
-```c
-uint64_t start_time = hal_timer_get_us();
-// ... do work ...
-uint64_t elapsed = hal_timer_get_us() - start_time;
-```
 
 ## Integration
 
 ### Initialization Sequence
 
 1. Use Zephyr UART console on UART0 (CH340 USB-UART bridge)
-2. Initialize timer subsystem
-3. Initialize GPIO (LED and button)
-4. Initialize UART for servo bus
-5. Register emergency stop callback
+2. Initialize GPIO (button)
+3. Initialize UART for servo bus
+4. Register emergency stop callback
 
 See `main.c::initialize_hal()` for reference implementation.
 
@@ -111,7 +80,6 @@ All HAL functions return:
 
 - **half_duplex_uart**: TX operations are mutex-protected. RX uses lock-free ring buffer.
 - **hal_gpio**: Functions are generally thread-safe (atomic GPIO operations).
-- **hal_timer**: All functions are thread-safe and reentrant.
 
 ## Testing
 
@@ -119,10 +87,8 @@ All HAL functions return:
 
 The current `main.c` includes basic HAL testing:
 
-1. **Timer test**: Measures loop time with microsecond precision
-2. **LED test**: Blinks LED during startup and heartbeat
-3. **Button test**: Monitors emergency stop button
-4. **UART test**: Initializes servo UART (Phase 3 will add servo commands)
+1. **Button test**: Monitors emergency stop button
+2. **UART test**: Initializes servo UART (Phase 3 will add servo commands)
 
 ### Expected Console Output
 
@@ -135,8 +101,6 @@ RTOS: Zephyr RTOS v3.6.0
 ===========================================
 Console: UART0 via CH340 USB-UART bridge
 Initializing HAL layer...
-Timer initialized: 240000000 Hz (240 cycles/us, 240000 cycles/ms)
-LED GPIO initialized (GPIO 27)
 Button GPIO initialized (GPIO 39)
 Half-duplex UART initialized: UART_1 @ 1000000 baud
 HAL layer initialized successfully
@@ -150,9 +114,7 @@ Heartbeat: 1 sec (loop time: XXXXX us)
 
 ### Manual Testing
 
-1. **LED test**: Observe LED blinking on startup and during heartbeat
-2. **Button test**: Press button, should log "EMERGENCY STOP ACTIVATED"
-3. **Timer test**: Check loop time measurements in console
+1. **Button test**: Press button, should log "EMERGENCY STOP ACTIVATED"
 
 ### Next Steps (Phase 3)
 
@@ -177,14 +139,6 @@ With HAL complete, Phase 3 will implement:
 - Verify GPIO 39 is configured with pull-up in device tree
 - Check button wiring (active-low configuration)
 - Verify interrupt is enabled in Zephyr config
-
-### Timer Resolution Issues
-
-**Symptom**: Timing measurements seem incorrect
-
-**Fix**:
-- Ensure `hal_timer_init()` is called before using timer functions
-- Verify system clock frequency matches ESP32 spec (240 MHz)
 
 ## References
 

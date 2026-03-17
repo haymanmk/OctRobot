@@ -275,8 +275,7 @@ octrobot/
 │   │   ├── main.c                     # Main application
 │   │   ├── hal/                       # Hardware abstraction
 │   │   │   ├── half_duplex_uart.c
-│   │   │   ├── hal_gpio.c
-│   │   │   └── hal_timer.c
+│   │   │   └── hal_gpio.c
 │   │   ├── drivers/                   # Servo driver
 │   │   │   ├── feetech_protocol.c
 │   │   │   └── feetech_servo.c

@@ -3,12 +3,10 @@
 ## Initialization Order
 
 ```c
-hal_timer_init();                          // 1. Timer first
-hal_gpio_led_init();                       // 2. GPIO
 hal_gpio_button_init();
 hal_gpio_button_set_callback(my_callback);
 
-struct half_duplex_uart_config cfg = {    // 3. UART last
+struct half_duplex_uart_config cfg = {    // 2. UART last
     .device_name = "UART_1",
     .baudrate = 1000000,
     .tx_timeout_ms = 100,
@@ -37,43 +35,30 @@ half_duplex_uart_flush_rx(uart);
 ### Timing Control Loops
 
 ```c
-// Option 1: Measure loop time
-uint64_t start = hal_timer_get_us();
+// Measure elapsed time
+int64_t start = k_uptime_get(); // milliseconds
 // ... do work ...
-uint64_t elapsed = hal_timer_get_us() - start;
+int64_t elapsed_ms = k_uptime_get() - start;
 
-// Option 2: Fixed-rate loop
+// Fixed-rate loop (yield-friendly)
 while (1) {
-    uint64_t loop_start = hal_timer_get_us();
-    
+    int64_t loop_start = k_uptime_get();
+
     // ... control loop work ...
-    
-    uint64_t work_time = hal_timer_get_us() - loop_start;
-    if (work_time < 1000) { // 1ms loop
-        hal_timer_delay_us(1000 - work_time);
+
+    int64_t work_ms = k_uptime_get() - loop_start;
+    if (work_ms < 1) {
+        k_msleep(1 - work_ms); // yield remaining time
     }
 }
 ```
 
-### GPIO Status Indication
+### GPIO Emergency Stop
 
 ```c
-// Heartbeat LED
-static bool led_state = false;
-void heartbeat_tick(void) {
-    led_state = !led_state;
-    hal_gpio_led_set(led_state);
-}
-
-// Emergency stop
+// Emergency stop callback
 void emergency_stop_handler(void) {
-    // Blink LED rapidly
-    for (int i = 0; i < 10; i++) {
-        hal_gpio_led_set(true);
-        hal_timer_delay_ms(100);
-        hal_gpio_led_set(false);
-        hal_timer_delay_ms(100);
-    }
+    LOG_ERR("Emergency stop triggered");
 }
 ```
 
@@ -98,17 +83,14 @@ if (ret == HAL_OK) {
 - **UART TX**: Mutex-protected, safe from multiple threads
 - **UART RX**: Lock-free ring buffer, safe for ISR + reads
 - **GPIO**: Atomic hardware operations, generally safe
-- **Timer**: All functions are reentrant and thread-safe
 
 ## Performance Tips
 
-1. **Avoid `hal_timer_delay_us()` in threads**: Use `k_usleep()` instead to yield
+1. **Batch UART operations**: Send all servo commands in SYNC_WRITE, not individual writes
 
-2. **Batch UART operations**: Send all servo commands in SYNC_WRITE, not individual writes
+2. **Pre-allocate buffers**: Avoid malloc in ISR or real-time loops
 
-3. **Pre-allocate buffers**: Avoid malloc in ISR or real-time loops
-
-4. **Check RX available before blocking receive**:
+3. **Check RX available before blocking receive**:
    ```c
    int avail = half_duplex_uart_rx_available(uart);
    if (avail >= expected_bytes) {
@@ -130,10 +112,6 @@ if (ret == HAL_OK) {
 **Symptom**: Button press not detected  
 **Fix**: Check pull-up configuration in DTS, verify GPIO 39 wiring
 
-### LED Not Visible
-**Note**: WS2812B needs special RGB driver for colors. Current implementation only controls power pin (limited visibility).  
-**Enhancement**: Add WS2812 LED strip driver in future phase
-
 ## Hardware Connections
 
 ```
@@ -143,7 +121,6 @@ M5Stack Atom Lite:
 │                 │
 │  GPIO 21 ──────┼─→ UART TX (to serial converter)
 │  GPIO 25 ──────┼─→ UART RX (from serial converter)
-│  GPIO 27 ──────┼─→ WS2812B LED
 │  GPIO 39 ──────┼─→ Button (Pull-up, active-low)
 │                 │
 │  USB-C ────────┼─→ Console & Power

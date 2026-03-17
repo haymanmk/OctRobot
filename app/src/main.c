@@ -13,9 +13,8 @@
 
 #include "feetech_servo.h"
 #include "hal_gpio.h"
-#include "hal_timer.h"
 #include "half_duplex_uart.h"
-#include "host_comms.h"
+#include "uart_console.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
@@ -37,24 +36,6 @@ static int initialize_hal(void)
 	int ret;
 
 	LOG_INF("Initializing HAL layer...");
-
-	ret = hal_timer_init();
-	if (ret != HAL_OK) {
-		LOG_ERR("Failed to initialize timer: %d", ret);
-		return ret;
-	}
-
-	ret = hal_gpio_led_init();
-	if (ret == HAL_OK) {
-		for (int i = 0; i < 3; i++) {
-			hal_gpio_led_set(true);
-			hal_timer_delay_ms(100);
-			hal_gpio_led_set(false);
-			hal_timer_delay_ms(100);
-		}
-	} else {
-		LOG_WRN("LED init failed: %d", ret);
-	}
 
 	ret = hal_gpio_button_init();
 	if (ret == HAL_OK) {
@@ -177,7 +158,7 @@ int main(void)
 	test_servos();
 
 	/* Initialize host communication */
-	ret = host_comms_init();
+	ret = uart_console_init();
 	if (ret == 0) {
 		LOG_INF("Host communication initialized");
 		LOG_INF("Connect via USB serial to send commands");
@@ -186,49 +167,23 @@ int main(void)
 		LOG_INF("Continuing without host control...");
 	}
 
-	uint32_t counter = 0;
-	uint64_t last_time_us = hal_timer_get_us();
-
 	LOG_INF("");
 	LOG_INF("===========================================");
 	LOG_INF("Entering main loop - Phase 3b Manual Control");
 	LOG_INF("===========================================");
 	LOG_INF("Send commands via USB serial to control robot");
 	LOG_INF("Available commands:");
-	LOG_INF("  - JOG_JOINT: Move joints incrementally");
-	LOG_INF("  - SET_JOINT_DIRECT: Direct position control");
-	LOG_INF("  - READ_STATE: Get current joint angles");
-	LOG_INF("  - DEMO Recording: Record and playback motions");
+	LOG_INF("  - jog: Move joints incrementally");
+	LOG_INF("  - set: Direct position control");
+	LOG_INF("  - read: Get current joint angles");
+	LOG_INF("  - demo: Record and playback motions");
 	LOG_INF("===========================================");
 	LOG_INF("");
 
 	while (1) {
-		/* Process host commands (non-blocking, should be called frequently) */
-		host_comms_process(0);
-
-		uint64_t current_time_us = hal_timer_get_us();
-		uint64_t elapsed_us = current_time_us - last_time_us;
-
-		/* Heartbeat log at reduced frequency - suppress when in manual control mode */
-		if (elapsed_us >= 10000000) {  /* 10 seconds */
-			last_time_us = current_time_us;
-			
-			/* Only log heartbeat if NOT in manual control mode */
-			if (!host_comms_is_manual_mode()) {
-				LOG_INF("Heartbeat: %u (10s)", counter);
-			}
-			
-			/* Always toggle LED */
-			hal_gpio_led_set(counter % 2);
-
-			if (emergency_stop_active) {
-				LOG_WRN("System halted - emergency stop active");
-			}
-			counter++;
-		}
-
-		/* Small delay to prevent busy-waiting, but fast enough for responsive commands */
-		k_sleep(K_USEC(100)); /* 100 microseconds = 0.0001 seconds */
+		// Heartbeat message every 5 seconds
+		LOG_DBG("Main loop heartbeat");
+		k_sleep(K_MSEC(5000));
 	}
 
 	return 0;

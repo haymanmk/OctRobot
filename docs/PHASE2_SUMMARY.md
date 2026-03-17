@@ -32,7 +32,6 @@ int half_duplex_uart_rx_available(handle)
 
 **Features:**
 - Emergency stop button with interrupt callback
-- Status LED control (WS2812B - simple on/off)
 - Device tree integration via Zephyr GPIO API
 
 **Key Functions:**
@@ -40,39 +39,12 @@ int half_duplex_uart_rx_available(handle)
 int hal_gpio_button_init(void)
 bool hal_gpio_button_is_pressed(void)
 int hal_gpio_button_set_callback(callback)
-int hal_gpio_led_init(void)
-int hal_gpio_led_set(bool on)
 ```
 
 **Hardware Integration:**
 - Button: GPIO 39 (emergency stop, active-low with pull-up)
-- LED: GPIO 27 (WS2812B RGB LED)
 
-#### 3. Timer Utilities
-**Files:**
-- `app/include/hal_timer.h`
-- `app/src/hal/hal_timer.c`
-
-**Features:**
-- Microsecond resolution timing (based on k_cycle_get_64)
-- Millisecond timestamps (based on k_uptime_get)
-- High-resolution busy-wait delays
-- Thread-safe and reentrant
-
-**Key Functions:**
-```c
-int hal_timer_init(void)
-uint64_t hal_timer_get_us(void)
-uint64_t hal_timer_get_ms(void)
-void hal_timer_delay_us(uint32_t us)
-void hal_timer_delay_ms(uint32_t ms)
-```
-
-**Performance:**
-- ESP32 @ 240 MHz: 240 cycles per microsecond
-- Sub-microsecond timing accuracy
-
-#### 4. HAL Types & Common Definitions
+#### 3. HAL Types & Common Definitions
 **Files:**
 - `app/include/hal_types.h`
 
@@ -86,15 +58,12 @@ void hal_timer_delay_ms(uint32_t ms)
 #### main.c (v0.2.0)
 - Added HAL initialization sequence
 - Emergency stop callback implementation
-- LED heartbeat indicator
-- Timing measurements in main loop
 - Integrated all HAL components
 
 #### CMakeLists.txt
 - Added HAL source files to build:
   - `src/hal/half_duplex_uart.c`
   - `src/hal/hal_gpio.c`
-  - `src/hal/hal_timer.c`
 
 ### Documentation
 
@@ -108,17 +77,11 @@ void hal_timer_delay_ms(uint32_t ms)
 ### Testing
 
 #### Functional Tests Implemented
-1. ✅ Timer initialization and microsecond timing
-2. ✅ LED blink on startup (3 blinks)
-3. ✅ LED heartbeat during operation
-4. ✅ Emergency stop button with interrupt
-5. ✅ UART initialization at 1 Mbps
-6. ✅ Loop timing measurements
+1. ✅ Emergency stop button with interrupt
+2. ✅ UART initialization at 1 Mbps
 
 #### Expected Behavior
-- LED blinks 3 times on startup
-- LED toggles every 2 seconds during heartbeat
-- Console shows timing measurements
+- Console shows HAL initialization messages
 - Pressing button triggers emergency stop log message
 - UART initializes successfully and is ready for servo communication
 
@@ -128,7 +91,6 @@ void hal_timer_delay_ms(uint32_t ms)
 |----------|------|-----------|---------------|
 | UART1 TX (Servo) | 21 | Output | To UART-to-serial converter |
 | UART1 RX (Servo) | 25 | Input | From UART-to-serial converter, pull-up |
-| Status LED | 27 | Output | WS2812B RGB |
 | Emergency Stop | 39 | Input | Active-low, pull-up, interrupt |
 
 ### Build Integration

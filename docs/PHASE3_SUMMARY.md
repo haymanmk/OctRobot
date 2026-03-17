@@ -267,7 +267,6 @@ docs/
 
 **Phase 2 (HAL):**
 - Uses `half_duplex_uart` for communication ✓
-- Uses `hal_timer` for delays ✓
 - Uses `hal_gpio` for emergency stop ✓
 - Integrates emergency stop with torque disable ✓
 

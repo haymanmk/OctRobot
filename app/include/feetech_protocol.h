@@ -112,7 +112,7 @@ struct feetech_packet {
  * @param param_len Number of parameter bytes
  * @return Calculated checksum
  */
-uint8_t feetech_calculate_checksum(uint8_t id, uint8_t length, uint8_t instruction,
+uint8_t feetech_protocol_calculate_checksum(uint8_t id, uint8_t length, uint8_t instruction,
                                     const uint8_t *params, uint8_t param_len);
 
 /**
@@ -123,7 +123,7 @@ uint8_t feetech_calculate_checksum(uint8_t id, uint8_t length, uint8_t instructi
  * @param buffer_size Size of output buffer
  * @return Number of bytes written to buffer, or negative error code
  */
-int feetech_build_packet(const struct feetech_packet *packet, uint8_t *buffer,
+int feetech_protocol_build_packet(const struct feetech_packet *packet, uint8_t *buffer,
                          size_t buffer_size);
 
 /**
@@ -134,7 +134,7 @@ int feetech_build_packet(const struct feetech_packet *packet, uint8_t *buffer,
  * @param packet Pointer to packet structure to fill
  * @return HAL_OK on success, error code otherwise
  */
-int feetech_parse_packet(const uint8_t *buffer, size_t buffer_len,
+int feetech_protocol_parse_packet(const uint8_t *buffer, size_t buffer_len,
                          struct feetech_packet *packet);
 
 /**
@@ -144,7 +144,7 @@ int feetech_parse_packet(const uint8_t *buffer, size_t buffer_len,
  * @param id Servo ID
  * @return HAL_OK if servo responds, error code otherwise
  */
-int feetech_ping(hal_uart_handle_t uart, uint8_t id);
+int feetech_protocol_ping(hal_uart_handle_t uart, uint8_t id);
 
 /**
  * @brief Read data from servo register
@@ -156,7 +156,7 @@ int feetech_ping(hal_uart_handle_t uart, uint8_t id);
  * @param data Output buffer for read data
  * @return HAL_OK on success, error code otherwise
  */
-int feetech_read(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
+int feetech_protocol_read(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
                  uint8_t length, uint8_t *data);
 
 /**
@@ -169,7 +169,7 @@ int feetech_read(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
  * @param length Number of bytes to write
  * @return HAL_OK on success, error code otherwise
  */
-int feetech_write(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
+int feetech_protocol_write(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
                   const uint8_t *data, uint8_t length);
 
 /**
@@ -183,7 +183,7 @@ int feetech_write(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
  * @param servo_count Number of servos
  * @return HAL_OK on success, error code otherwise
  */
-int feetech_sync_write(hal_uart_handle_t uart, uint8_t reg_addr, uint8_t data_len,
+int feetech_protocol_sync_write(hal_uart_handle_t uart, uint8_t reg_addr, uint8_t data_len,
                        const uint8_t *servo_ids, const uint8_t *servo_data,
                        uint8_t servo_count);
 
@@ -196,7 +196,7 @@ int feetech_sync_write(hal_uart_handle_t uart, uint8_t reg_addr, uint8_t data_le
  * @param value Pointer to store 16-bit value
  * @return HAL_OK on success, error code otherwise
  */
-int feetech_read_word(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
+int feetech_protocol_read_word(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
                       uint16_t *value);
 
 /**
@@ -208,7 +208,7 @@ int feetech_read_word(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
  * @param value 16-bit value to write
  * @return HAL_OK on success, error code otherwise
  */
-int feetech_write_word(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
+int feetech_protocol_write_word(hal_uart_handle_t uart, uint8_t id, uint8_t reg_addr,
                        uint16_t value);
 
 #endif /* OCTROBOT_FEETECH_PROTOCOL_H */

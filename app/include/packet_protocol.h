@@ -4,7 +4,7 @@
  *
  * SPDX-License-Identifier: Apache-2.0
  *
- * Binary packet protocol for USB-CDC host communication.
+ * Binary packet protocol for USB-UART host communication.
  * Format: [0xAA] [CMD] [PAYLOAD_LEN] [PAYLOAD...] [CRC8]
  *
  * Educational Note:

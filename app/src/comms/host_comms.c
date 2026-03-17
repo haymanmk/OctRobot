@@ -1,5 +1,5 @@
 /*
- * OctroBot Robot Arm Firmware - Host Communication Implementation
+ * OctroBot Robot Arm Firmware - Host Comms Implementation
  * Copyright (c) 2026 OctroBot Project
  *
  * SPDX-License-Identifier: Apache-2.0
@@ -67,7 +67,7 @@ static int handle_clear_demo(const uint8_t *payload, uint8_t len);
 
 int host_comms_init(void)
 {
-	LOG_INF("Initializing UART host communication...");
+	LOG_INF("Initializing UART host comms...");
 	
 	/* Get console UART device (UART0 via CH340 USB-UART bridge) */
 	uart_dev = DEVICE_DT_GET(DT_CHOSEN(zephyr_console));
@@ -76,7 +76,7 @@ int host_comms_init(void)
 		return -ENODEV;
 	}
 	
-	LOG_INF("UART host communication initialized successfully");
+	LOG_INF("UART host comms initialized successfully");
 	LOG_INF("Host can now send commands via UART (USB-to-UART bridge)");
 	
 	/* Initialize demo recording state */

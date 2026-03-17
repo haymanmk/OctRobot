@@ -21,7 +21,6 @@ target_include_directories(app PRIVATE
 target_sources(app PRIVATE
   src/hal/half_duplex_uart.c
   src/hal/hal_gpio.c
-  src/hal/hal_timer.c
 )
 
 # Servo driver (Phase 3)
@@ -34,6 +33,7 @@ target_sources(app PRIVATE
 target_sources(app PRIVATE
   src/comms/packet_protocol.c
   src/comms/host_comms.c
+  src/comms/uart_console.c
 )
 
 # Kinematics (to be added in Phase 4)

@@ -38,7 +38,7 @@ int feetech_servo_ping(uint8_t id)
 		return HAL_ERROR;
 	}
 	
-	return feetech_ping(servo_uart, id);
+	return feetech_protocol_ping(servo_uart, id);
 }
 
 int feetech_servo_set_torque_enable(uint8_t id, bool enable)
@@ -48,7 +48,7 @@ int feetech_servo_set_torque_enable(uint8_t id, bool enable)
 	}
 	
 	uint8_t value = enable ? 1 : 0;
-	int ret = feetech_write(servo_uart, id, FEETECH_REG_TORQUE_ENABLE, &value, 1);
+	int ret = feetech_protocol_write(servo_uart, id, FEETECH_REG_TORQUE_ENABLE, &value, 1);
 	
 	if (ret == HAL_OK) {
 		LOG_DBG("Servo %d torque %s", id, enable ? "enabled" : "disabled");
@@ -83,7 +83,7 @@ int feetech_servo_set_goal_position(uint8_t id, uint16_t position)
 	params[4] = FEETECH_DEFAULT_SPEED & 0xFF;            /* Speed low byte */
 	params[5] = (FEETECH_DEFAULT_SPEED >> 8) & 0xFF;     /* Speed high byte */
 	
-	int ret = feetech_write(servo_uart, id, FEETECH_REG_GOAL_POSITION_L, params, 6);
+	int ret = feetech_protocol_write(servo_uart, id, FEETECH_REG_GOAL_POSITION_L, params, 6);
 	
 	if (ret == HAL_OK) {
 		LOG_DBG("Servo %d goal position: %d", id, position);
@@ -109,7 +109,7 @@ int feetech_servo_set_goal_speed(uint8_t id, uint16_t speed)
 		speed = FEETECH_VEL_MAX;
 	}
 	
-	return feetech_write_word(servo_uart, id, FEETECH_REG_GOAL_SPEED_L, speed);
+	return feetech_protocol_write_word(servo_uart, id, FEETECH_REG_GOAL_SPEED_L, speed);
 }
 
 int feetech_servo_set_goal_time(uint8_t id, uint16_t time_ms)
@@ -118,7 +118,7 @@ int feetech_servo_set_goal_time(uint8_t id, uint16_t time_ms)
 		return HAL_ERROR;
 	}
 	
-	return feetech_write_word(servo_uart, id, FEETECH_REG_GOAL_TIME_L, time_ms);
+	return feetech_protocol_write_word(servo_uart, id, FEETECH_REG_GOAL_TIME_L, time_ms);
 }
 
 int feetech_servo_set_acceleration(uint8_t id, uint8_t acceleration)
@@ -127,7 +127,7 @@ int feetech_servo_set_acceleration(uint8_t id, uint8_t acceleration)
 		return HAL_ERROR;
 	}
 	
-	return feetech_write(servo_uart, id, FEETECH_REG_ACCELERATION, &acceleration, 1);
+	return feetech_protocol_write(servo_uart, id, FEETECH_REG_ACCELERATION, &acceleration, 1);
 }
 
 int feetech_servo_set_goal_position_ex(uint8_t id, uint16_t position, 
@@ -163,7 +163,7 @@ int feetech_servo_set_goal_position_ex(uint8_t id, uint16_t position,
 	params[4] = speed & 0xFF;           /* Speed low byte */
 	params[5] = (speed >> 8) & 0xFF;    /* Speed high byte */
 	
-	int ret = feetech_write(servo_uart, id, FEETECH_REG_GOAL_POSITION_L, params, 6);
+	int ret = feetech_protocol_write(servo_uart, id, FEETECH_REG_GOAL_POSITION_L, params, 6);
 	
 	if (ret == HAL_OK) {
 		LOG_DBG("Servo %d goal: pos=%d, time=%dms, speed=%d", id, position, time_ms, speed);
@@ -178,7 +178,7 @@ int feetech_servo_read_position(uint8_t id, uint16_t *position)
 		return HAL_INVALID;
 	}
 	
-	return feetech_read_word(servo_uart, id, FEETECH_REG_PRESENT_POSITION_L, position);
+	return feetech_protocol_read_word(servo_uart, id, FEETECH_REG_PRESENT_POSITION_L, position);
 }
 
 int feetech_servo_read_angle(uint8_t id, float *angle)
@@ -203,7 +203,7 @@ int feetech_servo_read_load(uint8_t id, uint16_t *load)
 		return HAL_INVALID;
 	}
 	
-	return feetech_read_word(servo_uart, id, FEETECH_REG_PRESENT_LOAD_L, load);
+	return feetech_protocol_read_word(servo_uart, id, FEETECH_REG_PRESENT_LOAD_L, load);
 }
 
 int feetech_servo_read_temperature(uint8_t id, uint8_t *temperature)
@@ -212,7 +212,7 @@ int feetech_servo_read_temperature(uint8_t id, uint8_t *temperature)
 		return HAL_INVALID;
 	}
 	
-	return feetech_read(servo_uart, id, FEETECH_REG_PRESENT_TEMPERATURE, 1, temperature);
+	return feetech_protocol_read(servo_uart, id, FEETECH_REG_PRESENT_TEMPERATURE, 1, temperature);
 }
 
 int feetech_servo_read_voltage(uint8_t id, uint8_t *voltage)
@@ -221,7 +221,7 @@ int feetech_servo_read_voltage(uint8_t id, uint8_t *voltage)
 		return HAL_INVALID;
 	}
 	
-	return feetech_read(servo_uart, id, FEETECH_REG_PRESENT_VOLTAGE, 1, voltage);
+	return feetech_protocol_read(servo_uart, id, FEETECH_REG_PRESENT_VOLTAGE, 1, voltage);
 }
 
 int feetech_servo_read_state(uint8_t id, struct feetech_servo_state *state)
@@ -239,7 +239,7 @@ int feetech_servo_read_state(uint8_t id, struct feetech_servo_state *state)
 	}
 	
 	/* Read speed */
-	ret = feetech_read_word(servo_uart, id, FEETECH_REG_PRESENT_SPEED_L,
+	ret = feetech_protocol_read_word(servo_uart, id, FEETECH_REG_PRESENT_SPEED_L,
 	                        &state->present_speed);
 	if (ret != HAL_OK) {
 		return ret;
@@ -265,7 +265,7 @@ int feetech_servo_read_state(uint8_t id, struct feetech_servo_state *state)
 	
 	/* Read moving status */
 	uint8_t moving;
-	ret = feetech_read(servo_uart, id, FEETECH_REG_MOVING, 1, &moving);
+	ret = feetech_protocol_read(servo_uart, id, FEETECH_REG_MOVING, 1, &moving);
 	if (ret != HAL_OK) {
 		return ret;
 	}
@@ -276,6 +276,28 @@ int feetech_servo_read_state(uint8_t id, struct feetech_servo_state *state)
 	LOG_DBG("Servo %d state: pos=%d, temp=%d°C, voltage=%d.%dV",
 	        id, state->present_position, state->present_temperature,
 	        state->present_voltage / 10, state->present_voltage % 10);
+	
+	return HAL_OK;
+}
+
+int feetech_servo_read_multi_states(const uint8_t *ids, struct feetech_servo_state *states,
+									uint8_t count)
+{
+	if (!servo_uart || !ids || !states) {
+		return HAL_INVALID;
+	}
+	
+	if (count == 0 || count > FEETECH_MAX_SERVOS) {
+		return HAL_INVALID;
+	}
+	
+	for (uint8_t i = 0; i < count; i++) {
+		int ret = feetech_servo_read_state(ids[i], &states[i]);
+		if (ret != HAL_OK) {
+			LOG_ERR("Failed to read state from servo %d", ids[i]);
+			return ret;
+		}
+	}
 	
 	return HAL_OK;
 }
@@ -308,7 +330,7 @@ int feetech_servo_sync_write_positions(const uint8_t *ids, const uint16_t *posit
 		data[i * 6 + 5] = (FEETECH_DEFAULT_SPEED >> 8) & 0xFF;           /* Speed high */
 	}
 	
-	int ret = feetech_sync_write(servo_uart, FEETECH_REG_GOAL_POSITION_L, 6,
+	int ret = feetech_protocol_sync_write(servo_uart, FEETECH_REG_GOAL_POSITION_L, 6,
 	                              ids, data, count);
 	
 	if (ret == HAL_OK) {
