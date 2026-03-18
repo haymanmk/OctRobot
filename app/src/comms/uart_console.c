@@ -20,12 +20,14 @@
 
 #include "utils.h"
 #include "uart_console.h"
+#include "servo_control.h"
+#include "hal_flash.h"
 
 LOG_MODULE_REGISTER(uart_console, CONFIG_UART_CONSOLE_LOG_LEVEL);
 
 #define RX_BUF_SIZE 256
 #define TX_BUF_SIZE 256
-#define STACK_SIZE 1024
+#define STACK_SIZE 2048
 #define PRIORITY 5
 #define MAX_ARGS 10
 
@@ -46,6 +48,24 @@ K_KERNEL_THREAD_DEFINE(uart_console_thread,
 
 // Initialize semaphore for new line received
 K_SEM_DEFINE(new_line_sem, 0, 10);
+
+/* Demo waypoint recording */
+#define MAX_WAYPOINTS 4  /* 0-3 waypoint slots */
+
+struct waypoint_data {
+	bool valid;           /* Is this waypoint recorded? */
+	float angles[6];      /* Joint angles in degrees */
+};
+
+/* On-disk demo format */
+struct demo_storage {
+	uint8_t waypoint_count;
+	uint8_t reserved[3];       /* Padding for alignment */
+	struct waypoint_data waypoints[MAX_WAYPOINTS];
+};
+
+/* RAM storage for active waypoints */
+static struct demo_storage active_demo = {0};
 
 /**
  * @brief Reply to host with a formatted message over UART.
@@ -97,11 +117,13 @@ static void uart_console_callback(const struct device *dev, void *user_data)
         return;
     }
 
+    LOG_DBG("UART RX interrupt triggered");
+
     // Read bytes into ring buffer
     uint8_t byte;
     while (uart_fifo_read(dev, &byte, 1) == 1) {
         if (!rx_ring_buffer_append(&rx_rb, byte)) {
-            LOG_WRN("RX ring buffer overflow, dropping byte: 0x%02X", byte);
+            LOG_WRN("RX ring buffer overflow, dropping oldest bytes to make room");
         }
 
         // Check for packet terminator
@@ -161,6 +183,11 @@ int uart_console_split_command(const uint8_t *cmd_buf, size_t cmd_len, char *arg
  * @param cmd_len Length of the command buffer
  * @return 0 on success, negative error code on failure
  * @note Available commands and their payload formats are shown below:
+ *       - $power [1/0] \n
+ *         Power on/off the robot arm (enables/disables torque on all joints)
+ *         Example: $power 1 \n (Power on)
+ *         Example: $power 0 \n (Power off)
+ * 
  *       - $jog [JOINT_ID] [DIRECTION] [DEGREES] \n
  *         JOINT_ID: 1-6 (joint number)
  *         DIRECTION: '+' for positive, '-' for negative
@@ -182,7 +209,23 @@ int uart_console_split_command(const uint8_t *cmd_buf, size_t cmd_len, char *arg
  *         DEG1-6: Desired angles for joints 1-6 in degrees (-180 to +180)
  *         Example: $set_angles 45 30 0 -30 -45 90 \n (Set joints to specified angles)
  * 
- *       - demo (TODO: Implement demo command in future phase)
+ *       ############################## 
+ *       # Teaching and Demo Commands #
+ *       ##############################
+ *       During teach mode, setting joint positions via command will be forbidden to allow safe manual manipulation.
+ *       - $teach [1/0] \n
+ *         Enter teach mode where the user can manually move the robot arm by hand.
+ *         During teach mode, a position-based soft compliance is enabled with low P gains
+ *         and max torque limits to allow safe manual manipulation.
+ *         Example: $teach 1 \n (Enter teach mode)
+ *         Example: $teach 0 \n (Exit teach mode)
+ * 
+ *       - $record [POINT_ID] \n
+ *         POINT_ID: 0-3 (waypoint slot to record)
+ *         Example: $record 1 \n (Record current joint angles as waypoint 1)
+ * 
+ *       - $demo \n
+ *         Playback a recorded demo sequence (Record by sending multiple $record commands, then $demo to play back)
  * @warning This function will modify the input command buffer.
  */
 int uart_console_process_command(const uint8_t *cmd_buf, size_t cmd_len)
@@ -206,7 +249,26 @@ int uart_console_process_command(const uint8_t *cmd_buf, size_t cmd_len)
     LOG_DBG("Parsed command: %s, argc: %d", command, argc);
     int ret;
     // Handle commands
-    if (strcmp(command, "jog") == 0) {
+    /* Power command */
+    if (strcmp(command, "power") == 0) {
+        if (argc != 2) {
+            LOG_WRN("Invalid 'power' command format. Expected: $power [1/0]");
+            return -EINVAL;
+        }
+        bool power_on = !!atoi(argv[1]);
+        LOG_DBG("Power command received: %s", power_on ? "ON" : "OFF");
+        
+        // Enable/disable torque on all joints
+        for (uint8_t id = 1; id <= 6; id++) {
+            ret = feetech_servo_set_torque_enable(id, power_on);
+            if (ret != 0) {
+                LOG_ERR("Failed to set torque for joint %d: %d", id, ret);
+                return ret;
+            }
+        }
+    }
+    /* Jog command */
+    else if (strcmp(command, "jog") == 0) {
         if (argc != 4) {
             LOG_WRN("Invalid 'jog' command format. Expected: $jog [JOINT_ID] [DIRECTION] [SPEED]");
             return -EINVAL;
@@ -221,6 +283,7 @@ int uart_console_process_command(const uint8_t *cmd_buf, size_t cmd_len)
             return ret;
         }
     }
+    /* Read command */
     else if ((ret = strcmp(command, "read")) == 0) {
         if (argc > 2) {
             LOG_WRN("Invalid 'read' command format. Expected: $read [JOINT_ID]");
@@ -255,6 +318,7 @@ int uart_console_process_command(const uint8_t *cmd_buf, size_t cmd_len)
             }
         }
     }
+    /* Set command */
     else if (strcmp(command, "set") == 0) {
         if (argc != 3) {
             LOG_WRN("Invalid 'set' command format. Expected: $set [JOINT_ID] [DEGREES]");
@@ -282,9 +346,7 @@ int uart_console_process_command(const uint8_t *cmd_buf, size_t cmd_len)
             }
         }
     }
-    else if (strcmp(command, "demo") == 0) {
-        LOG_DBG("Demo command received (not implemented yet)");
-    }
+    /* Set angles command */
     else if (strcmp(command, "set_angles") == 0) {
         if (argc != 7) {
             LOG_WRN("Invalid 'set_angles' command format. Expected: $set_angles [DEG1] [DEG2] [DEG3] [DEG4] [DEG5] [DEG6]");
@@ -299,6 +361,113 @@ int uart_console_process_command(const uint8_t *cmd_buf, size_t cmd_len)
                 return ret;
             }
         }
+    }
+    /* Teach command */
+    else if (strcmp(command, "teach") == 0) {
+        if (argc != 2) {
+            LOG_WRN("Invalid 'teach' command format. Expected: $teach [1/0]");
+            return -EINVAL;
+        }
+        bool enable = !!atoi(argv[1]);
+        LOG_DBG("Teach command received");
+        servo_control_soft_comply(enable);
+    }
+    /* Record command */
+    else if (strcmp(command, "record") == 0) {
+        if (argc != 2) {
+            LOG_WRN("Invalid 'record' command format. Expected: $record [POINT_ID]");
+            return -EINVAL;
+        }
+        int point_id = atoi(argv[1]);
+        
+        if (point_id < 0 || point_id >= MAX_WAYPOINTS) {
+            LOG_ERR("Invalid waypoint ID: %d (must be 0-%d)", point_id, MAX_WAYPOINTS - 1);
+            uart_console_reply("ERROR: Invalid waypoint ID\n");
+            return -EINVAL;
+        }
+        
+        LOG_INF("Recording waypoint %d", point_id);
+        
+        /* Read current joint angles */
+        for (uint8_t id = 1; id <= 6; id++) {
+            uint16_t position;
+            ret = feetech_servo_read_position(id, &position);
+            if (ret != 0) {
+                LOG_ERR("Failed to read position for joint %d: %d", id, ret);
+                uart_console_reply("ERROR: Failed to read joint %d\n", id);
+                return ret;
+            }
+            active_demo.waypoints[point_id].angles[id - 1] = FEETECH_POS_TO_DEG(position);
+            LOG_DBG("  Joint %d: %.2f deg", id, (double)active_demo.waypoints[point_id].angles[id - 1]);
+        }
+        
+        active_demo.waypoints[point_id].valid = true;
+        
+        /* Count total valid waypoints */
+        uint8_t count = 0;
+        for (int i = 0; i < MAX_WAYPOINTS; i++) {
+            if (active_demo.waypoints[i].valid) {
+                count++;
+            }
+        }
+        active_demo.waypoint_count = count;
+        
+        /* Save to flash */
+        ret = hal_flash_write("demo", &active_demo, sizeof(active_demo));
+        if (ret != HAL_OK) {
+            LOG_ERR("Failed to save waypoint to flash: %d", ret);
+            uart_console_reply("ERROR: Flash write failed\n");
+            return ret;
+        }
+        
+        LOG_INF("Waypoint %d recorded successfully (%d total waypoints)", point_id, count);
+        uart_console_reply("Waypoint %d recorded (total: %d)\n", point_id, count);
+    }
+    /* Demo command */
+    else if (strcmp(command, "demo") == 0) {
+        LOG_INF("Playing demo sequence");
+        
+        /* Load demo from flash */
+        struct demo_storage flash_demo;
+        ret = hal_flash_read("demo", &flash_demo, sizeof(flash_demo));
+        if (ret < 0) {
+            LOG_ERR("No demo found in flash");
+            uart_console_reply("ERROR: No demo recorded\n");
+            return -ENOENT;
+        }
+        
+        if (flash_demo.waypoint_count == 0) {
+            LOG_WRN("Demo has no waypoints");
+            uart_console_reply("ERROR: No waypoints recorded\n");
+            return -EINVAL;
+        }
+        
+        LOG_INF("Playing %d waypoints", flash_demo.waypoint_count);
+        uart_console_reply("Playing demo (%d waypoints)...\n", flash_demo.waypoint_count);
+        
+        /* Play each valid waypoint in sequence */
+        for (int i = 0; i < MAX_WAYPOINTS; i++) {
+            if (!flash_demo.waypoints[i].valid) {
+                continue;
+            }
+            
+            LOG_INF("Executing waypoint %d", i);
+            
+            /* Set all joint positions */
+            uint8_t ids[6] = {1, 2, 3, 4, 5, 6};
+            ret = feetech_servo_sync_write_angles(ids, flash_demo.waypoints[i].angles, 6);
+            if (ret != 0) {
+                LOG_ERR("Failed to execute waypoint %d: %d", i, ret);
+                uart_console_reply("ERROR: Failed at waypoint %d\n", i);
+                return ret;
+            }
+            
+            /* Wait for movement to complete */
+            k_sleep(K_MSEC(1500));  /* 1.5 second between waypoints */
+        }
+        
+        LOG_INF("Demo playback complete");
+        uart_console_reply("Demo complete\n");
     }
     else {
         LOG_WRN("Unknown command: %s, size: %zu, ret: %d", command, sizeof(command), ret);
@@ -386,11 +555,11 @@ int uart_console_send_servo_state(uint8_t joint_id, const struct feetech_servo_s
 
     // Format the servo state into a packet and send it over UART
     // For simplicity, we will send a CSV line in the format (split by whitespace):
-    // "$read JOINT_ID TEMP_C VOLTAGE_V LOAD_PCT ANGLE_DEG IS_MOVING ERROR\n"
+    // "$read JOINT_ID TEMP_C VOLTAGE_V LOAD_PCT ANGLE_DEG IS_MOVING IS_TORQUE_ENABLED ERROR\n"
     // Convert ticks to degrees for angle reporting
     float angle_deg = FEETECH_POS_TO_DEG(state->present_position);
 
-    return uart_console_reply("$read %d %d %d.%d %d %d %d %d\n",
+    return uart_console_reply("$read %d %d %d.%d %d %d %d %d %d\n",
                               joint_id,
                               state->present_temperature,
                               state->present_voltage / 10,
@@ -398,6 +567,7 @@ int uart_console_send_servo_state(uint8_t joint_id, const struct feetech_servo_s
                               state->present_load,
                               (int)(angle_deg * 100), // Send angle in hundredths of degrees
                               state->is_moving,
+                              state->is_torque_enabled,
                               state->error);
 }
 

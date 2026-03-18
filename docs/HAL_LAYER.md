@@ -56,14 +56,58 @@ int hal_gpio_button_set_callback(void (*callback)(void));
 **Hardware Mapping:**
 - Button (sw0) → GPIO 39 (emergency stop, active-low with pull-up)
 
+### 3. Flash Storage (`hal_flash.h/.c`)
+
+Manages persistent data storage using the on-chip flash memory.
+
+**Features:**
+- Key-value storage using Zephyr NVS (Non-Volatile Storage)
+- Automatic wear leveling
+- 704KB storage partition (ESP32 flash)
+- ~100k erase cycles per sector
+
+**API:**
+```c
+int hal_flash_init(void);
+int hal_flash_write(const char *key, const void *data, size_t len);
+int hal_flash_read(const char *key, void *data, size_t len);
+int hal_flash_delete(const char *key);
+bool hal_flash_exists(const char *key);
+int hal_flash_get_size(const char *key);
+int hal_flash_get_free_space(void);
+```
+
+**Usage Example:**
+```c
+/* Write demo recording to flash */
+struct demo_data {
+    uint8_t waypoint_count;
+    float joint_angles[50][6];
+};
+
+struct demo_data demo;
+/* ... populate demo data ... */
+
+ret = hal_flash_write("demo0", &demo, sizeof(demo));
+
+/* Read back later */
+struct demo_data loaded_demo;
+ret = hal_flash_read("demo0", &loaded_demo, sizeof(loaded_demo));
+```
+
+**Storage Keys:**
+- `"demo0"`, `"demo1"`, `"demo2"` - Demo recordings
+- Future: calibration data, configuration
+
 ## Integration
 
 ### Initialization Sequence
 
 1. Use Zephyr UART console on UART0 (CH340 USB-UART bridge)
 2. Initialize GPIO (button)
-3. Initialize UART for servo bus
-4. Register emergency stop callback
+3. Initialize Flash storage (NVS)
+4. Initialize UART for servo bus
+5. Register emergency stop callback
 
 See `main.c::initialize_hal()` for reference implementation.
 

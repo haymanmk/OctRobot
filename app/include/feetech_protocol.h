@@ -63,6 +63,8 @@
 #define FEETECH_REG_GOAL_TIME_H           0x2D
 #define FEETECH_REG_GOAL_SPEED_L          0x2E
 #define FEETECH_REG_GOAL_SPEED_H          0x2F
+#define FEETECH_REG_TORQUE_LIMIT_L        0x30
+#define FEETECH_REG_TORQUE_LIMIT_H        0x31
 #define FEETECH_REG_LOCK                  0x37
 #define FEETECH_REG_PRESENT_POSITION_L    0x38
 #define FEETECH_REG_PRESENT_POSITION_H    0x39
@@ -73,6 +75,7 @@
 #define FEETECH_REG_PRESENT_VOLTAGE       0x3E
 #define FEETECH_REG_PRESENT_TEMPERATURE   0x3F
 #define FEETECH_REG_REGISTERED            0x40
+#define FEETECH_REG_STATUS                0x41
 #define FEETECH_REG_MOVING                0x42
 #define FEETECH_REG_VIR_POSITION_L        0x46
 #define FEETECH_REG_VIR_POSITION_H        0x47

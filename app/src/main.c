@@ -13,6 +13,7 @@
 
 #include "feetech_servo.h"
 #include "hal_gpio.h"
+#include "hal_flash.h"
 #include "half_duplex_uart.h"
 #include "uart_console.h"
 
@@ -45,6 +46,13 @@ static int initialize_hal(void)
 		}
 	} else {
 		LOG_WRN("Button init failed: %d", ret);
+	}
+
+	/* Initialize flash storage for persistent data */
+	ret = hal_flash_init();
+	if (ret != HAL_OK) {
+		LOG_ERR("Failed to initialize flash storage: %d", ret);
+		/* Non-fatal - continue without persistent storage */
 	}
 
 	struct half_duplex_uart_config uart_config = {

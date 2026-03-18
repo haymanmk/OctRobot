@@ -13,7 +13,7 @@
 #include "feetech_servo.h"
 #include "feetech_protocol.h"
 
-LOG_MODULE_REGISTER(feetech_servo, LOG_LEVEL_INF);
+LOG_MODULE_REGISTER(feetech_servo, LOG_LEVEL_DBG);
 
 /* Global UART handle for servo communication */
 static hal_uart_handle_t servo_uart = NULL;
@@ -26,7 +26,7 @@ int feetech_servo_init(hal_uart_handle_t uart)
 	
 	servo_uart = uart;
 	
-	LOG_INF("Feetech servo driver initialized");
+	LOG_DBG("Feetech servo driver initialized");
 	
 	return HAL_OK;
 }
@@ -55,6 +55,45 @@ int feetech_servo_set_torque_enable(uint8_t id, bool enable)
 	}
 	
 	return ret;
+}
+
+bool feetech_servo_is_torque_enabled(uint16_t id)
+{
+	if (!servo_uart) {
+		return false;
+	}
+	
+	uint8_t value;
+	int ret = feetech_protocol_read(servo_uart, id, FEETECH_REG_TORQUE_ENABLE, 1, &value);
+	if (ret == HAL_OK) {
+		return value != 0;
+	} else {
+		LOG_ERR("Failed to read torque enable for servo %d: %d", id, ret);
+		return false;
+	}
+}
+
+int feetech_servo_set_torque_limit(uint8_t id, uint16_t max_torque)
+{
+	if (!servo_uart) {
+		return HAL_ERROR;
+	}
+	
+	if (max_torque > 1000) {
+		LOG_WRN("Max torque %d exceeds limit, clamping to 1000", max_torque);
+		max_torque = 1000;
+	}
+	
+	return feetech_protocol_write_word(servo_uart, id, FEETECH_REG_TORQUE_LIMIT_L, max_torque);
+}
+
+int feetech_servo_read_torque_limit(uint8_t id, uint16_t *max_torque)
+{
+	if (!servo_uart || !max_torque) {
+		return HAL_INVALID;
+	}
+	
+	return feetech_protocol_read_word(servo_uart, id, FEETECH_REG_TORQUE_LIMIT_L, max_torque);
 }
 
 int feetech_servo_set_goal_position(uint8_t id, uint16_t position)
@@ -224,6 +263,15 @@ int feetech_servo_read_voltage(uint8_t id, uint8_t *voltage)
 	return feetech_protocol_read(servo_uart, id, FEETECH_REG_PRESENT_VOLTAGE, 1, voltage);
 }
 
+int feetech_servo_read_status(uint8_t id, uint8_t *status)
+{
+	if (!servo_uart || !status) {
+		return HAL_INVALID;
+	}
+	
+	return feetech_protocol_read(servo_uart, id, FEETECH_REG_STATUS, 1, status);
+}
+
 int feetech_servo_read_state(uint8_t id, struct feetech_servo_state *state)
 {
 	if (!servo_uart || !state) {
@@ -270,9 +318,18 @@ int feetech_servo_read_state(uint8_t id, struct feetech_servo_state *state)
 		return ret;
 	}
 	state->is_moving = (moving != 0);
+
+	/* Read torque enable status */
+	state->is_torque_enabled = feetech_servo_is_torque_enabled(id);
 	
-	state->error = 0; /* Error flags would be in response packets */
-	
+	/* Extract error from response packets */
+	uint8_t status;
+	ret = feetech_servo_read_status(id, &status);
+	if (ret != HAL_OK) {
+		return ret;
+	}
+	state->error = status;
+
 	LOG_DBG("Servo %d state: pos=%d, temp=%d°C, voltage=%d.%dV",
 	        id, state->present_position, state->present_temperature,
 	        state->present_voltage / 10, state->present_voltage % 10);

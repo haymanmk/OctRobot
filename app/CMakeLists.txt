@@ -21,6 +21,7 @@ target_include_directories(app PRIVATE
 target_sources(app PRIVATE
   src/hal/half_duplex_uart.c
   src/hal/hal_gpio.c
+  src/hal/hal_flash.c
 )
 
 # Servo driver (Phase 3)
@@ -49,9 +50,9 @@ target_sources(app PRIVATE
 # )
 
 # Motion controller (to be added in Phase 6)
-# target_sources(app PRIVATE
-#   src/controller/motion_controller.c
-# )
+target_sources(app PRIVATE
+  src/controller/servo_control.c
+)
 
 # Host communications (to be added in Phase 7)
 # target_sources(app PRIVATE

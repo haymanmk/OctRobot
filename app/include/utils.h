@@ -44,12 +44,15 @@ extern "C" {
     } \
     bool name##_ring_buffer_append(name##_ring_buffer_t *rb, type item) \
     { \
+        bool overwritten = false; \
         if (name##_ring_buffer_is_full(rb)) { \
-            return false; /* Buffer full */ \
+            /* Drop oldest item to make room for the incoming one */ \
+            rb->tail = (rb->tail + 1) % RING_BUFFER_SIZE; \
+            overwritten = true; \
         } \
         rb->buffer[rb->head] = item; \
         rb->head = (rb->head + 1) % RING_BUFFER_SIZE; \
-        return true; \
+        return !overwritten; \
     } \
     bool name##_ring_buffer_pop(name##_ring_buffer_t *rb, type *item) \
     { \

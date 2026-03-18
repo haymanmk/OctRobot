@@ -51,6 +51,7 @@ struct feetech_servo_state {
 	uint8_t present_voltage;        /* Current voltage (0.1V units) */
 	uint8_t present_temperature;    /* Current temperature (°C) */
 	bool is_moving;                 /* Movement status */
+	bool is_torque_enabled;         /* Torque status */
 	uint8_t error;                  /* Error flags */
 };
 
@@ -78,6 +79,29 @@ int feetech_servo_ping(uint8_t id);
  * @return HAL_OK on success, error code otherwise
  */
 int feetech_servo_set_torque_enable(uint8_t id, bool enable);
+
+/**
+ * @brief Check if servo torque is currently enabled
+ * @param id Servo ID
+ * @return true if torque is enabled, false if disabled or on error
+ */
+bool feetech_servo_is_torque_enabled(uint16_t id);
+
+/**
+ * @brief Set torque limit for servo at runtime instead of using EEPROM settings
+ * @param id Servo ID
+ * @param max_torque Maximum torque (0-1000, where 1000 = 100%)
+ * @return HAL_OK on success, error code otherwise
+ */
+int feetech_servo_set_torque_limit(uint8_t id, uint16_t max_torque);
+
+/**
+ * @brief Read current torque limit setting from servo
+ * @param id Servo ID
+ * @param max_torque Pointer to store maximum torque (0-1000, where 1000 = 100%)
+ * @return HAL_OK on success, error code otherwise
+ */
+int feetech_servo_read_torque_limit(uint8_t id, uint16_t *max_torque);
 
 /**
  * @brief Set servo goal position (in ticks)
@@ -187,6 +211,15 @@ int feetech_servo_read_temperature(uint8_t id, uint8_t *temperature);
  * @return HAL_OK on success, error code otherwise
  */
 int feetech_servo_read_voltage(uint8_t id, uint8_t *voltage);
+
+/**
+ * @brief Read servo status
+ *
+ * @param id Servo ID
+ * @param status Pointer to store status byte
+ * @return HAL_OK on success, error code otherwise
+ */
+int feetech_servo_read_status(uint8_t id, uint8_t *status);
 
 /**
  * @brief Read full servo state
