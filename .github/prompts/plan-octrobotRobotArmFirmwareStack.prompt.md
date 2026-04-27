@@ -13,7 +13,7 @@
 
 ## TL;DR
 
-Build a layered C firmware stack on Zephyr RTOS targeting ESP32 (M5Stack Atom Lite). Layers: HAL → Servo Driver → Kinematics (FK/IK) → Trajectory Planner → Motion Controller → Host Command Interface. A clean host protocol over UART serial enables future ROS2 bridge without touching firmware.
+Build a layered C firmware stack on Zephyr RTOS targeting dual-core ESP32 (M5Stack Atom Lite). Layers: HAL → Servo Driver → Kinematics (FK/IK using POE) → Trajectory Planner → Motion Controller → Host Command Interface. Dual-core architecture: PRO_CPU (Core 0) handles servo I/O + safety; APP_CPU (Core 1) handles FK/IK computation. SMP with selective thread pinning provides isolation + load balancing. A clean host protocol over UART serial enables future ROS2 bridge without touching firmware.
 
 ---
 
@@ -43,7 +43,7 @@ Build a layered C firmware stack on Zephyr RTOS targeting ESP32 (M5Stack Atom Li
    │       └── m5stack_atom_lite.dts
    └── west.yml
    ```
-4. Configure `prj.conf`: enable `CONFIG_UART_INTERRUPT_DRIVEN` (no C++ config needed)
+4. Configure `prj.conf`: enable `CONFIG_UART_INTERRUPT_DRIVEN`, `CONFIG_SMP=y` (dual-core), `CONFIG_SCHED_CPU_MASK=y` (thread pinning), `CONFIG_FPU=y` (hardware floating point), `CONFIG_MSGQ=y` (message queues for IPC)
 5. Verify a "hello world" builds and flashes (UART log output visible on host)
 
 ---
@@ -126,20 +126,39 @@ Build a layered C firmware stack on Zephyr RTOS targeting ESP32 (M5Stack Atom Li
 
 ---
 
-## Phase 4 — Kinematics Module
+## Phase 4 — Kinematics Module (POE with Dual-Core)
 
-19. Define robot geometry:
-    - Store DH parameters (a, d, alpha, theta_offset) for all 6 joints as `const` arrays
-    - Joint limits (min/max radians) per joint
-20. Implement `forward_kinematics_compute(joint_angles[6], out_transform)`:
-    - Chain 6 homogeneous transform matrices using DH convention
-    - Returns end-effector pose (position + rotation matrix)
-21. Implement `inverse_kinematics` — recommended approach: **analytical IK for 6-DOF spherical wrist** (joints 4-5-6 intersect at a point):
-    - Decouple: solve wrist center position (joints 1-3 geometrically), then solve wrist orientation (joints 4-6 analytically)
-    - Return up to 8 solution candidates; select closest to current configuration
-    - Return error code if target is unreachable
-22. Math dependencies: implement lightweight `mat4x4`, `vec3`, `quat` in `kinematics/math.h/.c` — **no external linear algebra library** to keep the footprint minimal
-23. Unit test kinematics offline on host PC (same C source files, compiled with gcc, no Zephyr dependency)
+19. Implement matrix exponential library (`matrix_exp.c`):
+    - `skew_symmetric(ω)` → 3×3 skew-symmetric matrix from angular velocity vector
+    - `matrix_exp_se3(ξ, θ)` → 4×4 homogeneous transform via Rodrigues' formula
+    - Rodrigues: exp([ω]θ) = I + sin(θ)[ω] + (1-cos(θ))[ω]²
+20. Define robot geometry using POE (`robot_geometry.c`):
+    - Store screw axes ξ₁...ξ₆ as (ω, v) pairs (6×6 array, 144 bytes)
+    - Store home configuration M (4×4 matrix, end-effector pose at θ=0)
+    - Store joint limits (min/max radians) per joint
+    - Flash NVS storage for user calibration/overrides
+21. Implement forward kinematics (`forward_kinematics_poe.c`):
+    - FK(θ) = exp([ξ₁]θ₁) · exp([ξ₂]θ₂) · ... · exp([ξ₆]θ₆) · M
+    - Chain 6 matrix exponentials in sequence
+    - Returns end-effector pose (4×4 homogeneous transform)
+22. Implement FK worker thread (pinned to APP_CPU Core 1):
+    - Consumes FK requests from message queue (non-blocking for servo control)
+    - Computes FK in 2-5ms, posts result back via message queue
+    - Priority: lower than servo thread, higher than IK thread
+23. Implement spatial Jacobian (`jacobian.c`):
+    - J(θ) = [Ad(exp([ξ₁]θ₁)...exp([ξ₁₋₁]θ₁₋₁)) · ξᵢ] for each joint i
+    - Used for IK solver (Newton-Raphson iteration)
+24. Implement inverse kinematics solver (`inverse_kinematics_poe.c`):
+    - Numerical IK via Newton-Raphson: θₖ₊₁ = θₖ + J⁺(θₖ)·(log(T_target · FK(θₖ)⁻¹))ᵛ
+    - Damped pseudoinverse J⁺ = Jᵀ(JJᵀ + λ²I)⁻¹ for stability near singularities
+    - Max 20 iterations, ε = 1mm position + 0.01 rad orientation tolerance
+    - Returns closest solution or error code if unreachable
+25. Implement IK worker thread (pinned to APP_CPU Core 1):
+    - Consumes IK requests from message queue
+    - Computes IK in 10-50ms depending on iterations, posts result back
+    - Priority: lower than FK thread (FK needed for control loop, IK for planning)
+26. Math dependencies: implement `mat4x4`, `vec3`, `se3_log`, `pseudoinverse` in `kinematics/math.h/.c` — **no external library** to keep footprint minimal
+27. Unit test kinematics offline on host PC (same C source files, compiled with gcc, no Zephyr dependency)
 
 ---
 
@@ -167,6 +186,8 @@ Build a layered C firmware stack on Zephyr RTOS targeting ESP32 (M5Stack Atom Li
     - Feetech STS servos have internal PID — outer loop sends position setpoints only (no torque control needed unless servos support it)
 29. Implement emergency stop: GPIO 39 (button) ISR disables motion, sends hold-position command to all servos
 30. Watchdog: if host comms silent for >500ms during teleoperation, auto-stop
+
+**Dual-core thread assignment**: Motion controller + servo I/O + safety monitoring pinned to PRO_CPU (Core 0) for real-time guarantees. FK/IK worker threads pinned to APP_CPU (Core 1) for parallel computation.
 
 ---
 
@@ -219,6 +240,90 @@ Build a layered C firmware stack on Zephyr RTOS targeting ESP32 (M5Stack Atom Li
 
 ## Phase 8 — Integration & Testing
 
+### Testing Architecture: Hybrid Three-Layer Approach
+
+Testing uses three complementary layers:
+
+1. **Python cross-validation** (`validation/`): Generate ground truth FK/IK outputs using the `modern-robotics` Python library (from Lynch & Park's *Modern Robotics* textbook). Compare against C implementation outputs to catch math errors.
+2. **Zephyr Ztest unit tests** (`tests/`): Automated C unit tests using Zephyr's `CONFIG_ZTEST` framework. Run on `native_posix` (fast, no hardware) or on-target ESP32 for hardware-specific validation.
+3. **Host integration tests** (`host_test.py`): End-to-end tests over serial (servo control, streaming, demos — already exist from Phase 3b).
+
+### Directory Structure
+
+```
+octrobot/
+├── tests/                          # Zephyr Ztest unit tests
+│   └── kinematics/
+│       ├── CMakeLists.txt          # Pulls in app/src/kinematics/ sources
+│       ├── prj.conf                # CONFIG_ZTEST=y, CONFIG_FPU=y
+│       ├── testcase.yaml           # Test metadata for twister
+│       └── src/
+│           ├── test_matrix_exp.c
+│           ├── test_forward_kinematics.c
+│           └── test_kinematics_math.c
+└── validation/                     # Python cross-validation
+    ├── requirements.txt            # modern-robotics, numpy, pytest
+    ├── robot_config.yaml           # POE parameters (mirrors robot_geometry.c)
+    ├── verify_fk.py                # Generate expected FK outputs, compare with C
+    └── conftest.py                 # Shared pytest fixtures
+```
+
+### Layer 1: Python Cross-Validation (`validation/`)
+
+Uses the `modern-robotics` library as canonical reference:
+- `mr.FKinSpace(M, Slist, thetalist)` for FK ground truth
+- `mr.JacobianSpace(Slist, thetalist)` for Jacobian ground truth
+- `mr.IKinSpace(Slist, M, T, thetalist0, eomg, ev)` for IK ground truth
+- `mr.MatrixExp6(se3mat)` for individual matrix exponential validation
+
+Workflow:
+1. Define POE parameters in `robot_config.yaml` (must match `robot_geometry.c`)
+2. Generate test cases (zero config, single-joint, random configs)
+3. Compute expected transforms via `modern-robotics`
+4. Export as JSON test vectors (`test_data/fk_expected.json`)
+5. Compare against C output (serial log capture or compiled host binary)
+
+Run: `cd validation/ && python -m pytest` or `python verify_fk.py`
+
+### Layer 2: Zephyr Ztest Unit Tests (`tests/`)
+
+Ztest configuration:
+- `CONFIG_ZTEST=y`, `CONFIG_ZTEST_NEW_API=y`
+- `CONFIG_FPU=y`, `CONFIG_NEWLIB_LIBC=y` (for math functions)
+- `CONFIG_MAIN_STACK_SIZE=4096`, `CONFIG_ZTEST_STACK_SIZE=4096`
+- Test sources include actual kinematics `.c` files from `app/src/kinematics/`
+
+Test cases (embed expected values from Python cross-validation):
+- **Matrix exponential**: zero angle → identity, 90° Z rotation, 180° rotation, pure translation
+- **Skew-symmetric**: known vector → expected 3×3 matrix
+- **FK zero config**: all θ=0 → output must equal home transform M
+- **FK single joint**: rotate joint 1 by 30° → compare position/rotation with `mr.FKinSpace`
+- **FK multi-joint**: known 6-DOF config → compare full 4×4 transform
+- **FK round-trip consistency**: FK at θ, extract position, verify deterministic
+- **Performance**: 100 FK iterations < 500ms total (< 5ms each)
+
+Run modes:
+- `west build -b native_posix tests/kinematics/ && west build -t run` (fast, no hardware)
+- `west build -b m5stack_atom_lite/esp32/procpu tests/kinematics/ && west flash` (on-target)
+- `west twister -T tests/` (batch runner across platforms)
+
+### Layer 3: Host Integration Tests (`host_test.py`)
+
+Already exists from Phase 3b. Extend for kinematics:
+- Send `$poe_fk_test 0 0 0 0 0 0` → compare output with Python expected value
+- Send `$poe_validate` → verify all screws are valid unit vectors
+- Servo sync write → FK of current positions → verify physical consistency
+
+### Testing Workflow
+
+1. **Development**: Write C code → run Python `verify_fk.py` to generate expected values → embed in Ztest
+2. **Fast iteration**: Run Ztest on `native_posix` (sub-second feedback, no flashing)
+3. **Hardware validation**: Run Ztest on ESP32 target (catches FPU precision, stack, timing issues)
+4. **Regression**: `west twister -T tests/` on each code change
+5. **Cross-validation**: Periodically re-run Python suite against serial output for end-to-end check
+
+### Integration Tests
+
 35. Integration test: send `MOVE_JOINTS` from host Python script → verify all 6 joints move to target
 36. Integration test: send `MOVE_CARTESIAN` → verify IK solution is valid and arm reaches pose
 37. Tune trajectory parameters (max vel/accel) for smooth, safe motion
@@ -234,7 +339,7 @@ Build a layered C firmware stack on Zephyr RTOS targeting ESP32 (M5Stack Atom Li
   - Translates to `MOVE_JOINTS` packets → MCU
   - Publishes `/joint_states` from `STATUS_REPORT` packets
 - MoveIt2 integration via `ros2_control` hardware interface
-- RViz2 visualization using URDF built from DH parameters
+- RViz2 visualization using URDF built from POE screw axes and home configuration
 
 ---
 
@@ -244,8 +349,12 @@ Build a layered C firmware stack on Zephyr RTOS targeting ESP32 (M5Stack Atom Li
 - `app/src/drivers/feetech_bus.h/.c`
 - `app/src/drivers/feetech_servo.h/.c`
 - `app/src/kinematics/math.h/.c`
-- `app/src/kinematics/forward_kinematics.h/.c`
-- `app/src/kinematics/inverse_kinematics.h/.c`
+- `app/src/kinematics/matrix_exp.h/.c` — POE matrix exponentials (Rodrigues formula)
+- `app/src/kinematics/robot_geometry.h/.c` — POE screw axes, home config, limits
+- `app/src/kinematics/forward_kinematics_poe.h/.c` — FK via POE
+- `app/src/kinematics/inverse_kinematics_poe.h/.c` — Numerical IK (Newton-Raphson)
+- `app/src/kinematics/jacobian.h/.c` — Spatial Jacobian for IK solver
+- `app/src/kinematics/calibration.h/.c` — UART commands for POE parameter setup
 - `app/src/trajectory/joint_trajectory.h/.c`
 - `app/src/controller/motion_controller.h/.c`
 - `app/src/comms/host_comms.h/.c`
@@ -260,6 +369,8 @@ Build a layered C firmware stack on Zephyr RTOS targeting ESP32 (M5Stack Atom Li
 - **In scope**: firmware only — no simulation, no ROS2 in this phase
 - **Out of scope**: dynamics (gravity compensation, torque control) — deferred to later phase
 - **Servo inner loop**: Feetech STS series handles PID internally; outer loop sends position targets only
-- **IK method**: analytical spherical-wrist decoupling (fast, deterministic, no iteration — suitable for MCU)
+- **IK method**: numerical Newton-Raphson (10-50ms on ESP32 @ 240MHz, non-blocking via worker thread on APP_CPU)
+- **Kinematics formulation**: POE (Product of Exponentials) with screw theory — singularity-free, better calibration than DH
+- **Dual-core strategy**: SMP with selective thread pinning (CONFIG_SMP=y, CONFIG_SCHED_CPU_MASK=y) — critical threads pinned for isolation, flexible threads float for load balancing
 - **Math library**: hand-rolled minimal math (no Eigen), keeping binary size small under Zephyr
 - **Kinematics test**: same C source files compile on host PC for offline unit testing

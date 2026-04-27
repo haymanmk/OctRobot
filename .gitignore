@@ -1,5 +1,8 @@
 # Zephyr build artifacts
+# Use default build/ directory (not build-procpu or other custom names)
 build/
+build-*/
+*.log
 *.elf
 *.bin
 *.hex
@@ -18,7 +21,7 @@ __pycache__/
 *$py.class
 *.so
 .Python
-venv/
+.venv/
 ENV/
 env/
 

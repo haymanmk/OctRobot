@@ -57,6 +57,18 @@ all: build flash
 
 rebuild: pristine build
 
+# ---- Testing ----
+.PHONY: test test-native test-py
+
+test-native:
+	$(WEST) build -b native_sim tests/kinematics/ -d build-test
+	$(WEST) build -d build-test -t run
+
+test-py:
+	cd validation && pip install -q -r requirements.txt && python -m pytest -v
+
+test: test-native test-py
+
 # Development shortcuts
 .PHONY: bf bfm
 

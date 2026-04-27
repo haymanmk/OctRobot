@@ -1,0 +1,7 @@
+# OctroBot Kinematics Cross-Validation Dependencies
+# Uses modern-robotics library (Lynch & Park) as ground truth
+modern-robotics>=1.1.0
+numpy>=1.21.0
+scipy>=1.7.0
+pytest>=7.0.0
+pyyaml>=6.0

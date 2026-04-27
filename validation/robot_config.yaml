@@ -1,0 +1,38 @@
+# OctroBot POE Robot Configuration
+# Must match factory defaults in app/src/kinematics/robot_geometry.c
+#
+# Screw axes defined in space frame (ξ = [ω; v])
+# All angular values in radians
+
+num_joints: 6
+
+# Screw axes [omega_x, omega_y, omega_z, v_x, v_y, v_z]
+# Each row is one joint's screw axis in the space frame
+# Must match robot_geometry_factory_defaults() in app/src/kinematics/robot_geometry.c
+screw_axes:
+  # Joint 0: Base rotation (Z-axis at origin)      v = -ω×q = 0
+  - [ 0.000,  0.000,  1.000,   0.000,  0.000,  0.000]
+  # Joint 1: Shoulder pitch (Y-axis at [0,0,0.138])   v = [-0.138, 0, 0]
+  - [ 0.000,  1.000,  0.000,  -0.138,  0.000,  0.000]
+  # Joint 2: Elbow pitch (Y-axis, v as set in firmware)
+  - [ 0.000,  1.000,  0.000,  -0.238,  0.000,  0.000]
+  # Joint 3: Wrist roll (X-axis at [0.35,0,0.1])   v = [0, -0.1, 0]
+  - [ 1.000,  0.000,  0.000,   0.000,  0.243,  0.001]
+  # Joint 4: Wrist pitch (Y-axis)                  v = [0.1, 0, 0.35]
+  - [ 0.000,  1.000,  0.000,  -0.243,  0.000,  0.108]
+  # Joint 5: Wrist roll (X-axis at [0.45,0,0.1])   v = [0, -0.1, 0]
+  - [ 1.000,  0.000,  0.000,   0.000,  0.243,  0.000]
+
+# Home configuration M (4x4 homogeneous transform at theta = [0,0,0,0,0,0])
+# Identity rotation, translation [0.5, 0.0, 0.1]
+# Must match model.M in robot_geometry_factory_defaults()
+home_config:
+  - [ 0.000,  0.000, 1.000, 0.168]
+  - [-1.000,  0.000, 0.000, 0.000]
+  - [ 0.000, -1.000, 0.000, 0.243]
+  - [ 0.000,  0.000, 0.000, 1.000]
+
+# Joint limits (radians), ±150 degrees
+joint_limits:
+  min: [-2.6179938779, -2.6179938779, -2.6179938779, -2.6179938779, -2.6179938779, -2.6179938779]
+  max: [ 2.6179938779,  2.6179938779,  2.6179938779,  2.6179938779,  2.6179938779,  2.6179938779]

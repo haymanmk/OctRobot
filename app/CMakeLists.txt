@@ -37,12 +37,13 @@ target_sources(app PRIVATE
   src/comms/uart_console.c
 )
 
-# Kinematics (to be added in Phase 4)
-# target_sources(app PRIVATE
-#   src/kinematics/math.c
-#   src/kinematics/forward_kinematics.c
-#   src/kinematics/inverse_kinematics.c
-# )
+# Kinematics (Phase 4 - POE implementation)
+target_sources(app PRIVATE
+  src/kinematics/kinematics_math.c
+  src/kinematics/matrix_exp.c
+  src/kinematics/robot_geometry.c
+  src/kinematics/forward_kinematics_poe.c
+)
 
 # Trajectory planner (to be added in Phase 5)
 # target_sources(app PRIVATE

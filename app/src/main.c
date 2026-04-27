@@ -16,6 +16,8 @@
 #include "hal_flash.h"
 #include "half_duplex_uart.h"
 #include "uart_console.h"
+#include "robot_geometry.h"
+#include "forward_kinematics_poe.h"
 
 LOG_MODULE_REGISTER(main, LOG_LEVEL_INF);
 
@@ -139,6 +141,142 @@ static void test_servos(void)
 	LOG_INF("===========================================");
 }
 
+static void test_forward_kinematics(void)
+{
+	LOG_INF("");
+	LOG_INF("===========================================");
+	LOG_INF("Testing Forward Kinematics (POE)");
+	LOG_INF("===========================================");
+	
+	/* Initialize robot geometry (loads from flash or uses factory defaults) */
+	robot_geometry_init();
+	const poe_robot_model_t *model = robot_geometry_get_model();
+	
+	LOG_INF("Robot model loaded:");
+	LOG_INF("  - Screw axes: 6 joints");
+	LOG_INF("  - Home config: M matrix");
+	LOG_INF("  - Joint limits configured");
+	
+	/* Test 1: Zero configuration (home position) */
+	LOG_INF("");
+	LOG_INF("Test 1: Zero configuration (home position)");
+	float joint_angles_zero[NUM_JOINTS] = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+	mat4x4_t T_zero;
+	
+	if (forward_kinematics_compute(model, joint_angles_zero, &T_zero)) {
+		vec3_t pos = mat4x4_get_translation(&T_zero);
+		LOG_INF("  FK([0,0,0,0,0,0]):");
+		LOG_INF("    Position: [%.4f, %.4f, %.4f] m", 
+		        (double)pos.x, (double)pos.y, (double)pos.z);
+		LOG_INF("    (Should match home configuration M)");
+	} else {
+		LOG_ERR("  FK computation failed!");
+	}
+	
+	/* Test 2: Small joint movements */
+	LOG_INF("");
+	LOG_INF("Test 2: Small joint movements");
+	float joint_angles_30deg[NUM_JOINTS] = {
+		deg_to_rad(30.0f),   /* Base rotation 30° */
+		deg_to_rad(0.0f),    /* Shoulder */
+		deg_to_rad(0.0f),    /* Elbow */
+		deg_to_rad(0.0f),    /* Wrist roll */
+		deg_to_rad(0.0f),    /* Wrist pitch */
+		deg_to_rad(0.0f)     /* Wrist roll */
+	};
+	mat4x4_t T_30deg;
+	
+	if (forward_kinematics_compute(model, joint_angles_30deg, &T_30deg)) {
+		vec3_t pos = mat4x4_get_translation(&T_30deg);
+		LOG_INF("  FK([30°,0,0,0,0,0]):");
+		LOG_INF("    Position: [%.4f, %.4f, %.4f] m", 
+		        (double)pos.x, (double)pos.y, (double)pos.z);
+		LOG_INF("    (Base rotated 30°, end-effector should move in XY plane)");
+	} else {
+		LOG_ERR("  FK computation failed!");
+	}
+	
+	/* Test 3: Multiple joint movements */
+	LOG_INF("");
+	LOG_INF("Test 3: Multiple joint movements");
+	float joint_angles_multi[NUM_JOINTS] = {
+		deg_to_rad(45.0f),   /* Base 45° */
+		deg_to_rad(30.0f),   /* Shoulder 30° */
+		deg_to_rad(-20.0f),  /* Elbow -20° */
+		deg_to_rad(0.0f),    /* Wrist roll */
+		deg_to_rad(15.0f),   /* Wrist pitch 15° */
+		deg_to_rad(0.0f)     /* Wrist roll */
+	};
+	mat4x4_t T_multi;
+	
+	if (forward_kinematics_compute(model, joint_angles_multi, &T_multi)) {
+		vec3_t pos = mat4x4_get_translation(&T_multi);
+		mat3x3_t rot = mat4x4_get_rotation(&T_multi);
+		LOG_INF("  FK([45°,30°,-20°,0°,15°,0°]):");
+		LOG_INF("    Position: [%.4f, %.4f, %.4f] m", 
+		        (double)pos.x, (double)pos.y, (double)pos.z);
+		LOG_INF("    Rotation matrix:");
+		LOG_INF("      [%.3f, %.3f, %.3f]", 
+		        (double)rot.m[0][0], (double)rot.m[0][1], (double)rot.m[0][2]);
+		LOG_INF("      [%.3f, %.3f, %.3f]", 
+		        (double)rot.m[1][0], (double)rot.m[1][1], (double)rot.m[1][2]);
+		LOG_INF("      [%.3f, %.3f, %.3f]", 
+		        (double)rot.m[2][0], (double)rot.m[2][1], (double)rot.m[2][2]);
+	} else {
+		LOG_ERR("  FK computation failed!");
+	}
+	
+	/* Test 4: Partial FK (intermediate link positions) */
+	LOG_INF("");
+	LOG_INF("Test 4: Partial FK (joint 2 position)");
+	mat4x4_t T_partial;
+	
+	if (forward_kinematics_partial(model, joint_angles_multi, 2, &T_partial)) {
+		vec3_t pos = mat4x4_get_translation(&T_partial);
+		LOG_INF("  FK_partial([45°,30°,-20°,...], end_idx=2):");
+		LOG_INF("    Joint 2 position: [%.4f, %.4f, %.4f] m", 
+		        (double)pos.x, (double)pos.y, (double)pos.z);
+		LOG_INF("    (Position after joints 0-2)");
+	} else {
+		LOG_ERR("  Partial FK computation failed!");
+	}
+	
+	/* Test 5: Performance measurement */
+	LOG_INF("");
+	LOG_INF("Test 5: Performance measurement");
+	uint32_t start_time = k_cycle_get_32();
+	const int num_iterations = 100;
+	
+	for (int i = 0; i < num_iterations; i++) {
+		mat4x4_t T_perf;
+		forward_kinematics_compute(model, joint_angles_multi, &T_perf);
+	}
+	
+	uint32_t end_time = k_cycle_get_32();
+	uint32_t cycles = end_time - start_time;
+	uint32_t cycles_per_fk = cycles / num_iterations;
+	
+	/* ESP32 @ 240MHz: 1 cycle = 1/240MHz ≈ 4.17 ns */
+	float time_per_fk_us = (float)cycles_per_fk / 240.0f;  /* μs */
+	
+	LOG_INF("  FK computation time:");
+	LOG_INF("    %d iterations: %u cycles", num_iterations, cycles);
+	LOG_INF("    Average: %u cycles/FK (%.2f μs)", 
+	        cycles_per_fk, (double)time_per_fk_us);
+	LOG_INF("    Expected: 2000-5000 μs (2-5 ms)");
+	
+	if (time_per_fk_us < 10000.0f) {  /* Less than 10ms */
+		LOG_INF("    ✓ Performance is good!");
+	} else {
+		LOG_WRN("    ⚠ Performance is slower than expected");
+	}
+	
+	LOG_INF("");
+	LOG_INF("===========================================");
+	LOG_INF("Forward Kinematics test complete");
+	LOG_INF("===========================================");
+}
+
 int main(void)
 {
 	int ret;
@@ -164,6 +302,10 @@ int main(void)
 
 	k_sleep(K_MSEC(500));
 	test_servos();
+	
+	/* Test forward kinematics (Phase 4) */
+	k_sleep(K_MSEC(500));
+	test_forward_kinematics();
 
 	/* Initialize host communication */
 	ret = uart_console_init();
