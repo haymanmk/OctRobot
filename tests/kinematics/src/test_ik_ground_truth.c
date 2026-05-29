@@ -8,6 +8,12 @@
  * too and FK(out) must match T_target (poses, since IK solutions are not
  * unique).
  *
+ * Note: theta_ref in each vector is the modern_robotics IKinBody reference
+ * solution, retained in the header for human inspection and the Python
+ * cross-validator.  It is intentionally NOT compared here because IK
+ * solutions are non-unique; the pose round-trip FK(IK(T)) == T is the
+ * correctness criterion.
+ *
  * Regenerate vectors:
  *   cd validation && python gen_test_vectors.py
  * Then: make test-native
@@ -21,7 +27,12 @@
 #include "ik_test_vectors.h"
 #include <math.h>
 
+/* Solver converges to eomg=1e-3, ev=1e-4; float32 FK round-trip adds rounding. 5e-3 leaves margin. */
 #define IK_GT_POSE_TOL 5e-3f
+
+/* ======================================================================== */
+/* Fixture                                                                  */
+/* ======================================================================== */
 
 struct ik_ground_truth_fixture {
 	poe_robot_model_t model;
@@ -33,6 +44,10 @@ static void *ik_gt_setup(void)
 	fixture.model = robot_geometry_factory_defaults();
 	return &fixture;
 }
+
+/* ======================================================================== */
+/* Tests                                                                    */
+/* ======================================================================== */
 
 ZTEST_F(ik_ground_truth, test_all_vectors)
 {
@@ -68,5 +83,9 @@ ZTEST_F(ik_ground_truth, test_all_vectors)
 			     v, vec->description, (double)IK_GT_POSE_TOL);
 	}
 }
+
+/* ======================================================================== */
+/* Suite registration                                                       */
+/* ======================================================================== */
 
 ZTEST_SUITE(ik_ground_truth, NULL, ik_gt_setup, NULL, NULL, NULL);
