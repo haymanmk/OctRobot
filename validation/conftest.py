@@ -7,6 +7,7 @@ in the format expected by the modern-robotics library.
 
 import os
 import numpy as np
+import modern_robotics as mr
 import pytest
 import yaml
 
@@ -41,3 +42,9 @@ def home_config(robot_config):
 @pytest.fixture(scope="session")
 def num_joints(robot_config):
     return robot_config["num_joints"]
+
+
+@pytest.fixture(scope="session")
+def blist(slist, home_config):
+    """Body screw list for IKinBody: each column B_i = Adjoint(TransInv(M)) @ S_i."""
+    return mr.Adjoint(mr.TransInv(home_config)) @ slist

@@ -12,14 +12,9 @@ import numpy as np
 import modern_robotics as mr
 import pytest
 
-EOMG = 1e-3
-EV = 1e-4
-
-
-@pytest.fixture(scope="session")
-def blist(slist, home_config):
-    """Body screw list: each column B_i = Adjoint(TransInv(M)) @ S_i."""
-    return mr.Adjoint(mr.TransInv(home_config)) @ slist
+EOMG = 1e-3  # IKinBody orientation convergence tolerance (rad)
+EV = 1e-4    # IKinBody linear convergence tolerance (m)
+POSE_TOL = 1e-3  # round-trip pose match; equals EOMG since IKinBody converges to within it
 
 
 class TestBlistDerivation:
@@ -50,12 +45,12 @@ class TestIKinBodyRoundTrip:
         assert ok, f"IKinBody failed to converge (seed {seed})"
 
         T_check = mr.FKinSpace(home_config, slist, theta_sol)
-        np.testing.assert_allclose(T_check[:3, 3], T_target[:3, 3], atol=1e-3)
-        np.testing.assert_allclose(T_check[:3, :3], T_target[:3, :3], atol=1e-3)
+        np.testing.assert_allclose(T_check[:3, 3], T_target[:3, 3], atol=POSE_TOL)
+        np.testing.assert_allclose(T_check[:3, :3], T_target[:3, :3], atol=POSE_TOL)
 
     def test_home_target_solves_to_zero(self, slist, blist, home_config,
                                         num_joints):
         theta_sol, ok = mr.IKinBody(blist, home_config, home_config,
                                     np.zeros(num_joints), EOMG, EV)
         assert ok
-        np.testing.assert_allclose(theta_sol, np.zeros(num_joints), atol=1e-3)
+        np.testing.assert_allclose(theta_sol, np.zeros(num_joints), atol=POSE_TOL)
