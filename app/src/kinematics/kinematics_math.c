@@ -384,21 +384,22 @@ bool mat4x4_log_se3(const mat4x4_t *T, vec6_t *twist)
 	twist->w = vec3_scale(&twist->w, theta);
 	
 	/* Compute linear part: v = G^-1 * p
-	 * where G^-1 = (1/θ)I - (1/2)[ω] + (1/θ - cot(θ/2)/2)[ω]^2 */
+	 * With omgmat = [ω̂]·θ (the theta-scaled skew stored in twist->w):
+	 *   G^-1 = I - (1/2) omgmat
+	 *          + (1/θ - (1/2)cot(θ/2)) (1/θ) omgmat^2
+	 * (Modern Robotics, MatrixLog6.) */
 	mat3x3_t w_skew = mat3x3_skew_symmetric(&twist->w);
 	mat3x3_t w_skew_sq = mat3x3_mul(&w_skew, &w_skew);
-	
-	float a = 1.0f / theta;
+
 	float b = -0.5f;
-	float c = 1.0f / theta - 0.5f / tanf(theta / 2.0f);
-	
+	float c = (1.0f / theta - 0.5f / tanf(theta / 2.0f)) / theta;
+
 	mat3x3_t G_inv = mat3x3_identity();
 	mat3x3_t w_skew_scaled = mat3x3_scale(&w_skew, b);
 	G_inv = mat3x3_add(&G_inv, &w_skew_scaled);
 	mat3x3_t w_skew_sq_scaled = mat3x3_scale(&w_skew_sq, c);
 	G_inv = mat3x3_add(&G_inv, &w_skew_sq_scaled);
-	G_inv = mat3x3_scale(&G_inv, a);
-	
+
 	twist->v = mat3x3_mul_vec3(&G_inv, &p);
 	
 	return true;
@@ -418,23 +419,30 @@ mat6x6_t mat4x4_adjoint(const mat4x4_t *T)
 	mat3x3_t p_skew = mat3x3_skew_symmetric(&p);
 	mat3x3_t pR = mat3x3_mul(&p_skew, &R);
 	
+	/* Twist ordering is [w; v], so for V' = Ad_T * V:
+	 *   w' = R w
+	 *   v' = [p]R w + R v
+	 * Ad_T = [ R     0 ]
+	 *        [ [p]R  R ]
+	 */
+
 	/* Upper-left 3x3: R */
 	for (int i = 0; i < 3; i++) {
 		for (int j = 0; j < 3; j++) {
 			ad.m[i][j] = R.m[i][j];
 		}
 	}
-	
-	/* Upper-right 3x3: [p]R */
+
+	/* Upper-right 3x3: 0 */
+	/* (already zeroed) */
+
+	/* Lower-left 3x3: [p]R */
 	for (int i = 0; i < 3; i++) {
 		for (int j = 0; j < 3; j++) {
-			ad.m[i][j+3] = pR.m[i][j];
+			ad.m[i+3][j] = pR.m[i][j];
 		}
 	}
-	
-	/* Lower-left 3x3: 0 */
-	/* (already zeroed) */
-	
+
 	/* Lower-right 3x3: R */
 	for (int i = 0; i < 3; i++) {
 		for (int j = 0; j < 3; j++) {

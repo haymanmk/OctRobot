@@ -265,9 +265,10 @@ bool mat4x4_log_se3(const mat4x4_t *T, vec6_t *twist);
  * Compute adjoint matrix from homogeneous transform: Ad_T
  * Used for transforming screw axes between frames.
  * 
- * Ad_T = [ R      [p]R ]
- *        [ 0       R   ]
- * 
+ * For twist ordering [w; v]:
+ * Ad_T = [ R      0 ]
+ *        [ [p]R   R ]
+ *
  * where [p] is skew-symmetric matrix of position vector.
  */
 mat6x6_t mat4x4_adjoint(const mat4x4_t *T);
