@@ -65,7 +65,7 @@ test-native:
 	$(WEST) build -d build-test -t run
 
 test-py:
-	cd validation && pip install -q -r requirements.txt && python -m pytest -v
+	cd validation && pip install -q -r requirements.txt && python -m pytest -v -p no:launch_testing -p no:launch_ros
 
 test: test-native test-py
 
