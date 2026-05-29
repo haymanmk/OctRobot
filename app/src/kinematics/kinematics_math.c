@@ -319,6 +319,30 @@ bool mat4x4_is_equal(const mat4x4_t *a, const mat4x4_t *b, float tol)
  * SE(3) Logarithm
  * ======================================================================== */
 
+/* Compute the linear part of the SE(3) log: v = G^-1 * p.
+ *
+ * With omgmat = [ω̂]·θ (the theta-scaled skew, == skew(omega_theta)):
+ *   G^-1 = I - (1/2) omgmat + (1/θ - (1/2)cot(θ/2)) (1/θ) omgmat^2
+ * (Modern Robotics, MatrixLog6.) This is valid for all θ in (0, π],
+ * including θ = π since cot(π/2) = 0. */
+static vec3_t se3_log_linear(const vec3_t *omega_theta, float theta,
+			     const vec3_t *p)
+{
+	mat3x3_t w_skew = mat3x3_skew_symmetric(omega_theta);
+	mat3x3_t w_skew_sq = mat3x3_mul(&w_skew, &w_skew);
+
+	float b = -0.5f;
+	float c = (1.0f / theta - 0.5f / tanf(theta / 2.0f)) / theta;
+
+	mat3x3_t G_inv = mat3x3_identity();
+	mat3x3_t w_skew_scaled = mat3x3_scale(&w_skew, b);
+	G_inv = mat3x3_add(&G_inv, &w_skew_scaled);
+	mat3x3_t w_skew_sq_scaled = mat3x3_scale(&w_skew_sq, c);
+	G_inv = mat3x3_add(&G_inv, &w_skew_sq_scaled);
+
+	return mat3x3_mul_vec3(&G_inv, p);
+}
+
 bool mat4x4_log_se3(const mat4x4_t *T, vec6_t *twist)
 {
 	/* Extract rotation and translation */
@@ -365,10 +389,12 @@ bool mat4x4_log_se3(const mat4x4_t *T, vec6_t *twist)
 			axis.y = R.m[2][1] / (2.0f * axis.z);
 		}
 		
+		vec3_normalize(&axis);  /* Ensure unit axis before scaling */
 		twist->w = vec3_scale(&axis, theta);
-		
-		/* Compute linear part (complex, simplified version) */
-		twist->v = vec3_scale(&p, 0.5f);
+
+		/* Linear part: v = G^-1 * p (same formula as the general case;
+		 * the G^-1 series is non-singular at θ = π). */
+		twist->v = se3_log_linear(&twist->w, theta, &p);
 		return true;
 	}
 	
@@ -383,25 +409,9 @@ bool mat4x4_log_se3(const mat4x4_t *T, vec6_t *twist)
 	vec3_normalize(&twist->w);
 	twist->w = vec3_scale(&twist->w, theta);
 	
-	/* Compute linear part: v = G^-1 * p
-	 * With omgmat = [ω̂]·θ (the theta-scaled skew stored in twist->w):
-	 *   G^-1 = I - (1/2) omgmat
-	 *          + (1/θ - (1/2)cot(θ/2)) (1/θ) omgmat^2
-	 * (Modern Robotics, MatrixLog6.) */
-	mat3x3_t w_skew = mat3x3_skew_symmetric(&twist->w);
-	mat3x3_t w_skew_sq = mat3x3_mul(&w_skew, &w_skew);
+	/* Compute linear part: v = G^-1 * p (see se3_log_linear). */
+	twist->v = se3_log_linear(&twist->w, theta, &p);
 
-	float b = -0.5f;
-	float c = (1.0f / theta - 0.5f / tanf(theta / 2.0f)) / theta;
-
-	mat3x3_t G_inv = mat3x3_identity();
-	mat3x3_t w_skew_scaled = mat3x3_scale(&w_skew, b);
-	G_inv = mat3x3_add(&G_inv, &w_skew_scaled);
-	mat3x3_t w_skew_sq_scaled = mat3x3_scale(&w_skew_sq, c);
-	G_inv = mat3x3_add(&G_inv, &w_skew_sq_scaled);
-
-	twist->v = mat3x3_mul_vec3(&G_inv, &p);
-	
 	return true;
 }
 

@@ -7,6 +7,7 @@
 
 #include <zephyr/ztest.h>
 #include "kinematics_math.h"
+#include "matrix_exp.h"
 #include <math.h>
 
 /* ======================================================================== */
@@ -202,6 +203,38 @@ ZTEST(kinematics_math, test_clamp_float)
 	zassert_true(is_near_equal(clamp_float(5.0f, 0.0f, 10.0f), 5.0f, 1e-6f));
 	zassert_true(is_near_equal(clamp_float(-1.0f, 0.0f, 10.0f), 0.0f, 1e-6f));
 	zassert_true(is_near_equal(clamp_float(15.0f, 0.0f, 10.0f), 10.0f, 1e-6f));
+}
+
+/* ======================================================================== */
+/* SE(3) logarithm tests                                                    */
+/* ======================================================================== */
+
+/* Round-trip check that mat4x4_log_se3 inverts matrix_exp_se3 for a
+ * theta = pi rotation with a nonzero translation/screw. This exercises
+ * Case 2's linear part, which the 0.5*p placeholder gets wrong. */
+ZTEST(kinematics_math, test_log_se3_theta_pi_with_translation)
+{
+	vec6_t xi = { .w = {0.0f, 0.0f, 1.0f}, .v = {0.3f, -0.2f, 0.1f} };
+	float theta = (float)M_PI;
+
+	mat4x4_t T = matrix_exp_se3(&xi, theta);
+
+	vec6_t tw;
+	bool ok = mat4x4_log_se3(&T, &tw);
+	zassert_true(ok);
+
+	/* Reconstruct a unit screw from the recovered twist and round-trip. */
+	float rec_theta = vec3_norm(&tw.w);
+	zassert_true(rec_theta > 1e-6f);
+
+	float inv = 1.0f / rec_theta;
+	vec6_t xi_rec = {
+		.w = vec3_scale(&tw.w, inv),
+		.v = vec3_scale(&tw.v, inv),
+	};
+	mat4x4_t T2 = matrix_exp_se3(&xi_rec, rec_theta);
+
+	zassert_true(mat4x4_is_equal(&T2, &T, 1e-4f));
 }
 
 /* ======================================================================== */
