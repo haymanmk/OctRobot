@@ -36,4 +36,5 @@ target_sources(app PRIVATE
   src/test_forward_kinematics.c
   src/test_fk_ground_truth.c
   src/test_inverse_kinematics.c
+  src/test_ik_ground_truth.c
 )
