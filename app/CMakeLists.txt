@@ -43,6 +43,7 @@ target_sources(app PRIVATE
   src/kinematics/matrix_exp.c
   src/kinematics/robot_geometry.c
   src/kinematics/forward_kinematics_poe.c
+  src/kinematics/inverse_kinematics_poe.c
 )
 
 # Trajectory planner (to be added in Phase 5)

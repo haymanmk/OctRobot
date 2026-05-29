@@ -9,9 +9,10 @@ project(test_kinematics LANGUAGES C)
 # Path to the main application source
 set(APP_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../app)
 
-# Include application headers
+# Include application headers + generated test-vector header
 target_include_directories(app PRIVATE
   ${APP_SRC_DIR}/include
+  ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
 
 # Application kinematics sources under test
@@ -20,6 +21,7 @@ target_sources(app PRIVATE
   ${APP_SRC_DIR}/src/kinematics/matrix_exp.c
   ${APP_SRC_DIR}/src/kinematics/robot_geometry.c
   ${APP_SRC_DIR}/src/kinematics/forward_kinematics_poe.c
+  ${APP_SRC_DIR}/src/kinematics/inverse_kinematics_poe.c
 )
 
 # HAL flash stub (replaces real NVS-based hal_flash.c for test builds)
@@ -32,4 +34,6 @@ target_sources(app PRIVATE
   src/test_kinematics_math.c
   src/test_matrix_exp.c
   src/test_forward_kinematics.c
+  src/test_fk_ground_truth.c
+  src/test_inverse_kinematics.c
 )
