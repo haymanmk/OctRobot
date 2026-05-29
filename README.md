@@ -20,18 +20,25 @@ octrobot/
 │   │   ├── main.c           # Main entry point
 │   │   ├── hal/             # Hardware abstraction layer
 │   │   ├── drivers/         # Servo drivers
-│   │   ├── kinematics/      # Forward/inverse kinematics
-│   │   ├── trajectory/      # Motion planning
-│   │   ├── controller/      # Motion controller
+│   │   ├── kinematics/      # POE forward kinematics
+│   │   ├── trajectory/      # Motion planning (Phase 5)
+│   │   ├── controller/      # Motion controller (Phase 6)
 │   │   └── comms/           # Host protocol
 │   ├── include/             # Public headers
 │   ├── CMakeLists.txt
 │   └── prj.conf
 ├── boards/                   # Custom board definitions
 │   └── m5stack_atom_lite/   # M5Stack Atom Lite board
+├── tests/kinematics/         # Zephyr native-sim unit tests
+│   ├── src/                 # Test sources (math, matrix exp, FK, ground-truth)
+│   └── include/             # Auto-generated fk_test_vectors.h
+├── validation/               # Python FK cross-validation
+│   ├── robot_config.yaml    # POE model (screw axes + home config M)
+│   ├── gen_test_vectors.py  # Generates ground-truth from modern_robotics
+│   ├── fk_test_vectors.json # Ground-truth FK results (float64)
+│   └── test_fk_crossval.py  # pytest cross-validation suite
 ├── west.yml                 # West manifest (Zephyr workspace)
 └── README.md
-
 ```
 
 ## Getting Started
@@ -156,6 +163,37 @@ After flashing the firmware, you can immediately test manual control:
 3. **Full testing guide:**
    - See [docs/phase3b_validation.md](docs/phase3b_validation.md) for complete test procedures
    - See [docs/PHASE3B_SUMMARY.md](docs/PHASE3B_SUMMARY.md) for implementation details
+   - See [docs/FK_TEST_README.md](docs/FK_TEST_README.md) for FK cross-validation details
+
+## Testing
+
+### Run all tests
+
+```bash
+make test          # native-sim unit tests + Python cross-validation
+make test-native   # Zephyr native-sim unit tests only
+make test-py       # Python pytest cross-validation only
+```
+
+### Test layers
+
+| Layer | Tool | What it checks |
+|---|---|---|
+| **C unit tests** | Zephyr native-sim (`make test-native`) | Math ops, matrix exponential, FK properties, FK vs ground truth |
+| **Python cross-validation** | pytest (`make test-py`) | FK via `modern_robotics`, SE(3) validity, config-derived position assertions |
+
+### Updating the robot model
+
+When you change `validation/robot_config.yaml` (e.g., after hardware calibration), regenerate the ground-truth vectors before rebuilding:
+
+```bash
+cd validation
+python gen_test_vectors.py   # writes fk_test_vectors.json + tests/kinematics/include/fk_test_vectors.h
+cd ..
+make test
+```
+
+See [docs/FK_TEST_README.md](docs/FK_TEST_README.md) for full details on the cross-validation pipeline.
 
 ## Development Phases
 
@@ -163,11 +201,11 @@ After flashing the firmware, you can immediately test manual control:
 - **Phase 2**: ✅ HAL layer (UART, GPIO, timers)
 - **Phase 3**: ✅ Feetech servo driver
 - **Phase 3b**: ✅ USB CDC-ACM manual control interface (early validation)
-- **Phase 4**: Kinematics (FK/IK)
-- **Phase 5**: Trajectory planner
-- **Phase 6**: Motion controller
-- **Phase 7**: Full host command protocol (trajectory commands)
-- **Phase 8**: Integration & testing
+- **Phase 4**: ⏳ Kinematics — POE FK complete (Mecharm 270 Pi); body-frame IK solver complete (offline-validated); not yet wired to motion control
+- **Phase 5**: ❌ Trajectory planner
+- **Phase 6**: ❌ Motion controller
+- **Phase 7**: ❌ Full host command protocol (trajectory commands)
+- **Phase 8**: ❌ Integration & testing
 
 ### Phase 3b: Manual Control & Validation
 
@@ -183,8 +221,6 @@ Phase 3b implements an **early validation interface** before complex kinematics.
 
 **Important Note:**
 Phase 3b uses UART0 for both debug logs and command packets. Debug logging is reduced to WARNING level to minimize interference. For production use, consider disabling logging (`CONFIG_LOG=n` in prj.conf) or using a separate UART for commands.
-- Python interactive CLI for testing
-- Emergency stop command
 
 **Documentation:**
 - [Phase 3b Implementation Summary](docs/PHASE3B_SUMMARY.md) - Complete feature overview, design notes, code statistics
@@ -217,7 +253,7 @@ Phase 3b uses UART0 for both debug logs and command packets. Debug logging is re
 ├─────────────────────────────────────┤
 │     Trajectory Planner              │ ← Joint-space interpolation (Phase 5)
 ├─────────────────────────────────────┤
-│   Kinematics (FK/IK)                │ ← DH parameters (Phase 4)
+│   Kinematics (FK/IK)                │ ← POE formula, Mecharm 270 Pi (Phase 4)
 ├─────────────────────────────────────┤
 │   Servo Driver (Feetech SCS/STS)   │ ← SYNC_WRITE for 6 joints ✅
 ├─────────────────────────────────────┤
@@ -227,12 +263,14 @@ Phase 3b uses UART0 for both debug logs and command packets. Debug logging is re
 └─────────────────────────────────────┘
 ```
 
-**Current Status (Phase 3b):**
+**Current Status (Phase 4 in progress):**
 - ✅ HAL layer complete
-- ✅ Feetech servo driver complete  
+- ✅ Feetech servo driver complete
 - ✅ USB CDC-ACM packet protocol complete
 - ✅ Manual control commands (jog, direct set, read state, demo recording)
-- ⏸️ Kinematics, trajectory planning, and motion controller pending
+- ✅ Forward kinematics — POE formulation, Mecharm 270 Pi, cross-validated against `modern_robotics`
+- ✅ Inverse kinematics — body-frame IK solver complete (offline-validated); not yet wired to motion control
+- ⏸️ Trajectory planning and motion controller pending
 
 ## License
 
@@ -247,7 +285,7 @@ Apache-2.0
 
 ---
 
-**Status**: Phase 3 complete - Servo driver functional
+**Status**: Phase 4 in progress — POE FK complete (Mecharm 270 Pi); body-frame IK solver complete (offline-validated); not yet wired to motion control
 
 See [docs/HAL_LAYER.md](docs/HAL_LAYER.md) for HAL documentation.
 See [docs/SERVO_DRIVER.md](docs/SERVO_DRIVER.md) for servo driver documentation.
