@@ -22,6 +22,7 @@
 #include "uart_console.h"
 #include "servo_control.h"
 #include "hal_flash.h"
+#include "cartesian_move.h"
 
 LOG_MODULE_REGISTER(uart_console, CONFIG_UART_CONSOLE_LOG_LEVEL);
 
@@ -361,6 +362,34 @@ int uart_console_process_command(const uint8_t *cmd_buf, size_t cmd_len)
                 return ret;
             }
         }
+    }
+    /* Cartesian move-to-pose:
+     *   $movec X Y Z ROLL PITCH YAW [TIME_MS]
+     *   X Y Z in meters; ROLL PITCH YAW in degrees (ZYX); TIME_MS default 1000.
+     */
+    else if (strcmp(command, "movec") == 0) {
+        if (argc != 7 && argc != 8) {
+            LOG_WRN("Invalid 'movec' command format. Expected: "
+                "$movec X Y Z ROLL PITCH YAW [TIME_MS]");
+            return -EINVAL;
+        }
+        float x = atof(argv[1]);
+        float y = atof(argv[2]);
+        float z = atof(argv[3]);
+        float roll = atof(argv[4]);
+        float pitch = atof(argv[5]);
+        float yaw = atof(argv[6]);
+        uint16_t time_ms = (argc == 8) ? (uint16_t)atoi(argv[7]) : 1000;
+
+        cmove_status_t st = cartesian_move_to_pose(x, y, z, roll, pitch,
+                               yaw, time_ms);
+        if (st != CMOVE_OK) {
+            LOG_WRN("movec failed: status %d", st);
+            return -EIO;
+        }
+        LOG_INF("movec: moving to [%.3f %.3f %.3f] rpy[%.1f %.1f %.1f] "
+            "in %u ms", (double)x, (double)y, (double)z,
+            (double)roll, (double)pitch, (double)yaw, time_ms);
     }
     /* Teach command */
     else if (strcmp(command, "teach") == 0) {
