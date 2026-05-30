@@ -267,6 +267,26 @@ int feetech_servo_sync_write_angles(const uint8_t *ids, const float *angles,
                                      uint8_t count);
 
 /**
+ * @brief Sync-write goal positions to multiple servos with a move time.
+ *        Unlike feetech_servo_sync_write_positions (immediate), this packs the
+ *        servo running-time field so the move spans time_ms.
+ * @param count Number of servos (max FEETECH_MAX_SERVOS)
+ * @return 0 (HAL_OK) on success, negative on error
+ */
+int feetech_servo_sync_write_positions_timed(const uint8_t *ids,
+                                             const uint16_t *positions,
+                                             uint8_t count, uint16_t time_ms);
+
+/**
+ * @brief Sync-write goal angles (degrees) to multiple servos with a move time.
+ * @param count Number of servos (max FEETECH_MAX_SERVOS)
+ * @return 0 (HAL_OK) on success, negative on error
+ */
+int feetech_servo_sync_write_angles_timed(const uint8_t *ids,
+                                          const float *angles,
+                                          uint8_t count, uint16_t time_ms);
+
+/**
  * @brief Read positions from multiple servos
  *
  * @param ids Array of servo IDs

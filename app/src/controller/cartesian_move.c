@@ -66,11 +66,13 @@ cmove_status_t cartesian_move_to_pose(float x, float y, float z,
 		}
 	}
 
-	/* 5. Apply move time, then sync-write goal angles. */
-	for (int i = 0; i < NUM_JOINTS; i++) {
-		(void)feetech_servo_set_goal_time(k_ids[i], move_time_ms);
-	}
-	if (feetech_servo_sync_write_angles(k_ids, servo_goal, NUM_JOINTS) != 0) {
+	/* 5. Sync-write goal angles with the requested move time (single atomic
+	 * packet; all joints interpolate over move_time_ms and finish together).
+	 * NOTE: the plain feetech_servo_sync_write_angles() hardcodes the servo
+	 * time field to 0 (immediate) and cannot honor move_time_ms, so the
+	 * _timed variant is required. */
+	if (feetech_servo_sync_write_angles_timed(k_ids, servo_goal, NUM_JOINTS,
+						  move_time_ms) != 0) {
 		LOG_WRN("movec: sync write failed");
 		return CMOVE_SERVO_ERR;
 	}

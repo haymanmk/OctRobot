@@ -417,6 +417,65 @@ int feetech_servo_sync_write_angles(const uint8_t *ids, const float *angles,
 	return feetech_servo_sync_write_positions(ids, positions, count);
 }
 
+int feetech_servo_sync_write_positions_timed(const uint8_t *ids,
+                                             const uint16_t *positions,
+                                             uint8_t count, uint16_t time_ms)
+{
+	if (!servo_uart || !ids || !positions) {
+		return HAL_INVALID;
+	}
+
+	if (count == 0 || count > FEETECH_MAX_SERVOS) {
+		LOG_ERR("Invalid servo count: %d", count);
+		return HAL_INVALID;
+	}
+
+	/*
+	 * Pack 6 bytes per servo (0x2A-0x2F):
+	 * - Position (2 bytes)
+	 * - Time (2 bytes) = move duration; non-zero engages time-based motion
+	 * - Speed (2 bytes) = 0 so the time field governs the trajectory
+	 */
+	uint8_t data[FEETECH_MAX_SERVOS * 6];
+	for (uint8_t i = 0; i < count; i++) {
+		data[i * 6 + 0] = (uint8_t)(positions[i] & 0xFF);
+		data[i * 6 + 1] = (uint8_t)((positions[i] >> 8) & 0xFF);
+		data[i * 6 + 2] = (uint8_t)(time_ms & 0xFF);
+		data[i * 6 + 3] = (uint8_t)((time_ms >> 8) & 0xFF);
+		data[i * 6 + 4] = 0;
+		data[i * 6 + 5] = 0;
+	}
+
+	int ret = feetech_protocol_sync_write(servo_uart, FEETECH_REG_GOAL_POSITION_L,
+	                                      6, ids, data, count);
+
+	if (ret == HAL_OK) {
+		LOG_DBG("Sync write %d timed positions (%u ms)", count, time_ms);
+	}
+
+	return ret;
+}
+
+int feetech_servo_sync_write_angles_timed(const uint8_t *ids,
+                                          const float *angles,
+                                          uint8_t count, uint16_t time_ms)
+{
+	if (!ids || !angles) {
+		return HAL_INVALID;
+	}
+
+	if (count == 0 || count > FEETECH_MAX_SERVOS) {
+		return HAL_INVALID;
+	}
+
+	uint16_t positions[FEETECH_MAX_SERVOS];
+	for (uint8_t i = 0; i < count; i++) {
+		positions[i] = FEETECH_DEG_TO_POS(angles[i]);
+	}
+
+	return feetech_servo_sync_write_positions_timed(ids, positions, count, time_ms);
+}
+
 int feetech_servo_read_multi_positions(const uint8_t *ids, uint16_t *positions,
                                         uint8_t count)
 {
