@@ -14,18 +14,18 @@
 static void jm_reset(void *unused)
 {
 	ARG_UNUSED(unused);
-	const float sign[6]   = { 1, 1, 1, 1, 1, 1 };
-	const float offset[6] = { 0, 0, 0, 0, 0, 0 };
+	const float sign[NUM_JOINTS]   = { 1, 1, 1, 1, 1, 1 };
+	const float offset[NUM_JOINTS] = { 0, 0, 0, 0, 0, 0 };
 	joint_map_set_calibration(sign, offset);
 }
 
 ZTEST(joint_map, test_round_trip_identity)
 {
-	const float theta[6] = { 0.1f, -0.3f, 0.5f, -0.2f, 0.4f, -0.6f };
-	float servo[6], back[6];
+	const float theta[NUM_JOINTS] = { 0.1f, -0.3f, 0.5f, -0.2f, 0.4f, -0.6f };
+	float servo[NUM_JOINTS], back[NUM_JOINTS];
 	joint_map_model_to_servo(theta, servo);
 	joint_map_servo_to_model(servo, back);
-	for (int i = 0; i < 6; i++) {
+	for (int i = 0; i < NUM_JOINTS; i++) {
 		zassert_within(back[i], theta[i], 1e-5f,
 			       "joint %d round-trip", i);
 	}
@@ -33,10 +33,10 @@ ZTEST(joint_map, test_round_trip_identity)
 
 ZTEST(joint_map, test_identity_known_values)
 {
-	float theta[6] = { 0, 0, 0, 0, 0, 0 };
-	float servo[6];
+	float theta[NUM_JOINTS] = { 0, 0, 0, 0, 0, 0 };
+	float servo[NUM_JOINTS];
 	joint_map_model_to_servo(theta, servo);
-	for (int i = 0; i < 6; i++) {
+	for (int i = 0; i < NUM_JOINTS; i++) {
 		zassert_within(servo[i], 0.0f, JM_TOL, "zero -> 0 deg");
 	}
 
@@ -47,28 +47,42 @@ ZTEST(joint_map, test_identity_known_values)
 
 ZTEST(joint_map, test_sign_offset_known_value)
 {
-	const float sign[6]   = { 1, -1, 1, 1, 1, 1 };
-	const float offset[6] = { 0, 90, 0, 0, 0, 0 };
+	const float sign[NUM_JOINTS]   = { 1, -1, 1, 1, 1, 1 };
+	const float offset[NUM_JOINTS] = { 0, 90, 0, 0, 0, 0 };
 	joint_map_set_calibration(sign, offset);
 
 	/* theta1 = 0.30 rad = 17.1887 deg ; servo1 = -1*17.1887 + 90 = 72.8113 */
-	const float theta[6] = { 0, 0.30f, 0, 0, 0, 0 };
-	float servo[6];
+	const float theta[NUM_JOINTS] = { 0, 0.30f, 0, 0, 0, 0 };
+	float servo[NUM_JOINTS];
 	joint_map_model_to_servo(theta, servo);
 	zassert_within(servo[1], 72.8113f, JM_TOL, "sign+offset applied");
 }
 
-ZTEST(joint_map, test_round_trip_non_identity)
+ZTEST(joint_map, test_servo_to_model_known_value)
 {
-	const float sign[6]   = { 1, -1, 1, -1, 1, -1 };
-	const float offset[6] = { 10, 90, -45, 30, 0, 5 };
+	const float sign[NUM_JOINTS]   = { 1, -1, 1, 1, 1, 1 };
+	const float offset[NUM_JOINTS] = { 0, 90, 0, 0, 0, 0 };
 	joint_map_set_calibration(sign, offset);
 
-	const float theta[6] = { 0.1f, -0.3f, 0.5f, -0.2f, 0.4f, -0.6f };
-	float servo[6], back[6];
+	/* Inverse of the forward known-value case:
+	 * servo1 = 72.8113 deg ; theta1 = deg_to_rad((72.8113 - 90)*-1) = 0.30 rad */
+	const float servo[NUM_JOINTS] = { 0, 72.8113f, 0, 0, 0, 0 };
+	float theta[NUM_JOINTS];
+	joint_map_servo_to_model(servo, theta);
+	zassert_within(theta[1], 0.30f, JM_TOL, "inverse sign+offset applied");
+}
+
+ZTEST(joint_map, test_round_trip_non_identity)
+{
+	const float sign[NUM_JOINTS]   = { 1, -1, 1, -1, 1, -1 };
+	const float offset[NUM_JOINTS] = { 10, 90, -45, 30, 0, 5 };
+	joint_map_set_calibration(sign, offset);
+
+	const float theta[NUM_JOINTS] = { 0.1f, -0.3f, 0.5f, -0.2f, 0.4f, -0.6f };
+	float servo[NUM_JOINTS], back[NUM_JOINTS];
 	joint_map_model_to_servo(theta, servo);
 	joint_map_servo_to_model(servo, back);
-	for (int i = 0; i < 6; i++) {
+	for (int i = 0; i < NUM_JOINTS; i++) {
 		zassert_within(back[i], theta[i], 1e-5f,
 			       "joint %d non-identity round-trip", i);
 	}

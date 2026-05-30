@@ -32,7 +32,10 @@ void joint_map_model_to_servo(const float theta_rad[NUM_JOINTS],
 void joint_map_servo_to_model(const float servo_deg[NUM_JOINTS],
 			      float theta_rad[NUM_JOINTS]);
 
-/** Install a calibration table (copies both arrays). */
+/**
+ * Install a calibration table (copies both arrays).
+ * Each sign[i] must be +1 or -1 (the inverse map relies on sign^2 == 1).
+ */
 void joint_map_set_calibration(const float sign[NUM_JOINTS],
 			       const float offset_deg[NUM_JOINTS]);
 
