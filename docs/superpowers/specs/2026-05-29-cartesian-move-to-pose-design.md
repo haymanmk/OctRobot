@@ -19,8 +19,10 @@ Phase 6 increment: it turns the offline-validated IK (see
   servos move there with onboard smoothing.
 - No binary `CMD_MOVE_CARTESIAN` (0x02) protocol work. The active interface is
   the text console; the binary path stays an inactive placeholder.
-- No NVS persistence of joint calibration this round (constants in code; tune
-  during bring-up). NVS calibration can come later.
+- No NVS persistence and no console calibration command this round. The
+  calibration table defaults to identity and is settable at runtime via
+  `joint_map_set_calibration` (used by tests); persistence and a tuning command
+  come later.
 
 ## Decisions
 
@@ -62,7 +64,13 @@ hardware.
   - `void joint_map_servo_to_model(const float servo_deg[6], float theta_rad[6])`
     — inverse: `theta_rad[i] = deg_to_rad((servo_deg[i] - offset_deg[i]) * sign[i])`
     (valid because `sign[i] ∈ {+1,-1}`, so dividing by sign == multiplying).
-  - Defaults: `sign[6]` all `+1`, `offset_deg[6]` all `0`.
+  - `void joint_map_set_calibration(const float sign[6], const float offset_deg[6])`
+    — installs a calibration table at runtime. Drives the module's mutable
+    table (initialized to identity). Used now as the unit-test seam for the
+    non-identity case, and the natural hook for later NVS-based field
+    calibration.
+  - Defaults: `sign[6]` all `+1`, `offset_deg[6]` all `0` (identity) until a
+    `joint_map_set_calibration` call overrides them.
 - **`app/include/cartesian_move.h` / `app/src/controller/cartesian_move.c`**
   (new): orchestration, split into a servo-independent core and a hardware
   wrapper:
@@ -139,9 +147,15 @@ find sign flips.
 - `mat3x3_from_rpy`: zero → identity; single-axis rotations (e.g. yaw 90° about
   Z); cross-checked against `modern_robotics` in a Python test for several RPY
   triples.
-- `joint_map`: forward∘inverse round-trip returns the input, for **identity**
-  and for a **non-identity** sign/offset table (test via a seam that lets the
-  test set the table, or a second internal table — keep it simple).
+- `joint_map`: two complementary kinds of checks (both required — round-trip
+  alone can mask a shared error such as both directions dropping the offset):
+  - **Round-trip:** `model_to_servo` then `servo_to_model` returns the input,
+    for the **identity** default and for a **non-identity** table.
+  - **Known absolute values:** assert hand-computed results — identity maps
+    `θ=0 → 0°` and `θ=π/2 → 90°`; with `sign[1]=-1, offset_deg[1]=90`,
+    `θ₁=0.30 rad → servo_deg₁ = 72.8113°`.
+  - The non-identity table is installed via `joint_map_set_calibration` (the
+    chosen test seam).
 - `cartesian_pose_to_joints`: pick known joint angles θ → FK → extract
   position + RPY from the resulting pose → feed back through the function →
   assert FK of the result matches the original pose within tolerance (pose
