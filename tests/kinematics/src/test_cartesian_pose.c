@@ -94,4 +94,34 @@ ZTEST_F(cartesian_pose, test_unreachable)
 		      "unreachable pose should be CMOVE_NO_SOLUTION, got %d", st);
 }
 
+ZTEST_F(cartesian_pose, test_out_of_limits)
+{
+	/* Joint 0 at 2.80 rad is beyond the +2.618 rad (150 deg) limit.
+	 * Build the pose from this config, then seed IK right next to it so the
+	 * solver converges back to the out-of-limits solution. */
+	const float theta_oob[NUM_JOINTS] = {
+		2.80f, 0.10f, 0.10f, 0.00f, 0.10f, 0.00f
+	};
+	mat4x4_t T;
+	zassert_true(forward_kinematics_compute(&fixture->model, theta_oob, &T),
+		     "FK setup");
+
+	vec3_t p = mat4x4_get_translation(&T);
+	mat3x3_t R = mat4x4_get_rotation(&T);
+	float roll, pitch, yaw;
+	rpy_from_mat3(&R, &roll, &pitch, &yaw);
+
+	/* Seed very close to the out-of-limits config. */
+	const float seed[NUM_JOINTS] = {
+		2.78f, 0.08f, 0.12f, 0.00f, 0.08f, 0.00f
+	};
+	float out[NUM_JOINTS] = {0};
+	cmove_status_t st = cartesian_pose_to_joints(
+		&fixture->model, p.x, p.y, p.z,
+		rad_to_deg(roll), rad_to_deg(pitch), rad_to_deg(yaw),
+		seed, out);
+	zassert_equal(st, CMOVE_OUT_OF_LIMITS,
+		      "expected CMOVE_OUT_OF_LIMITS, got %d", st);
+}
+
 ZTEST_SUITE(cartesian_pose, NULL, cp_setup, NULL, NULL, NULL);
