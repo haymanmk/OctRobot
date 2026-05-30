@@ -66,39 +66,42 @@ class TestFKSingleJoint:
     """Rotate one joint at a time, verify FK changes appropriately."""
 
     def test_base_rotation_90deg(self, slist, home_config, num_joints):
-        """Joint 0: Z-rotation by 90°. End-effector swings from +X to +Y."""
+        """Joint 0: Z-rotation by 90°.
+
+        S0 = [0,0,1; 0,0,0] is a pure Z-rotation at the origin, so the
+        end-effector translation [px, py, pz] = Rz(90°) · p_home.
+        p_home = [0.168, 0, 0.243] → p = [0, 0.168, 0.243].
+        """
         theta = np.zeros(num_joints)
         theta[0] = np.pi / 2
         T = mr.FKinSpace(home_config, slist, theta)
 
         assert is_valid_se3(T)
-        # Original home position is [0.5, 0, 0.1].
-        # 90° Z rotation: x→-y, y→x → expected position [0, 0.5, 0.1]
-        np.testing.assert_allclose(T[0, 3], 0.0, atol=TOL_POS)
-        np.testing.assert_allclose(T[1, 3], 0.5, atol=TOL_POS)
-        np.testing.assert_allclose(T[2, 3], 0.1, atol=TOL_POS)
+        np.testing.assert_allclose(T[0, 3],  0.0,   atol=TOL_POS)
+        np.testing.assert_allclose(T[1, 3],  0.168, atol=TOL_POS)
+        np.testing.assert_allclose(T[2, 3],  0.243, atol=TOL_POS)
 
     def test_base_rotation_neg90deg(self, slist, home_config, num_joints):
-        """Joint 0: Z-rotation by -90°."""
+        """Joint 0: Z-rotation by -90°.  p = [0, -0.168, 0.243]."""
         theta = np.zeros(num_joints)
         theta[0] = -np.pi / 2
         T = mr.FKinSpace(home_config, slist, theta)
 
         assert is_valid_se3(T)
-        np.testing.assert_allclose(T[0, 3], 0.0, atol=TOL_POS)
-        np.testing.assert_allclose(T[1, 3], -0.5, atol=TOL_POS)
-        np.testing.assert_allclose(T[2, 3], 0.1, atol=TOL_POS)
+        np.testing.assert_allclose(T[0, 3],  0.0,    atol=TOL_POS)
+        np.testing.assert_allclose(T[1, 3], -0.168,  atol=TOL_POS)
+        np.testing.assert_allclose(T[2, 3],  0.243,  atol=TOL_POS)
 
     def test_base_rotation_180deg(self, slist, home_config, num_joints):
-        """Joint 0: Z-rotation by 180°."""
+        """Joint 0: Z-rotation by 180°.  p = [-0.168, 0, 0.243]."""
         theta = np.zeros(num_joints)
         theta[0] = np.pi
         T = mr.FKinSpace(home_config, slist, theta)
 
         assert is_valid_se3(T)
-        np.testing.assert_allclose(T[0, 3], -0.5, atol=TOL_POS)
-        np.testing.assert_allclose(T[1, 3], 0.0, atol=TOL_POS)
-        np.testing.assert_allclose(T[2, 3], 0.1, atol=TOL_POS)
+        np.testing.assert_allclose(T[0, 3], -0.168, atol=TOL_POS)
+        np.testing.assert_allclose(T[1, 3],  0.0,   atol=TOL_POS)
+        np.testing.assert_allclose(T[2, 3],  0.243, atol=TOL_POS)
 
     @pytest.mark.parametrize("joint_idx", range(6))
     def test_single_joint_produces_valid_se3(self, slist, home_config, num_joints, joint_idx):

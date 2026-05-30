@@ -48,7 +48,7 @@ ZTEST_F(forward_kinematics, test_zero_config_equals_home)
 
 ZTEST_F(forward_kinematics, test_zero_config_position)
 {
-	/* Position at zero config should be [0.5, 0.0, 0.1] */
+	/* Position at zero config equals the home config translation [0.168, 0, 0.243] */
 	float theta[NUM_JOINTS] = {0};
 	vec3_t pos;
 	mat3x3_t orient;
@@ -56,9 +56,9 @@ ZTEST_F(forward_kinematics, test_zero_config_position)
 						   &pos, &orient);
 
 	zassert_true(ok);
-	zassert_true(is_near_equal(pos.x, 0.5f, FK_TOL));
+	zassert_true(is_near_equal(pos.x, 0.168f, FK_TOL));
 	zassert_true(is_near_equal(pos.y, 0.0f, FK_TOL));
-	zassert_true(is_near_equal(pos.z, 0.1f, FK_TOL));
+	zassert_true(is_near_equal(pos.z, 0.243f, FK_TOL));
 }
 
 /* ======================================================================== */
@@ -67,9 +67,9 @@ ZTEST_F(forward_kinematics, test_zero_config_position)
 
 ZTEST_F(forward_kinematics, test_base_rotation_90deg)
 {
-	/* Joint 0: Z-rotation by π/2 at origin.
-	 * Home position [0.5, 0, 0.1] → expected [0, 0.5, 0.1]
-	 * (x → -y, y → x under 90° Z rotation)
+	/* Joint 0: Z-rotation by π/2.
+	 * Home translation [0.168, 0, 0.243] → expected [0, 0.168, 0.243].
+	 * (Rz(π/2) maps x→y in translation; z unchanged for pure base rotation)
 	 */
 	float theta[NUM_JOINTS] = {0};
 	theta[0] = (float)(M_PI / 2.0);
@@ -82,15 +82,15 @@ ZTEST_F(forward_kinematics, test_base_rotation_90deg)
 	zassert_true(ok);
 	zassert_true(is_near_equal(pos.x, 0.0f, FK_TOL),
 		     "x should be ~0 after 90 deg Z rotation");
-	zassert_true(is_near_equal(pos.y, 0.5f, FK_TOL),
-		     "y should be ~0.5 after 90 deg Z rotation");
-	zassert_true(is_near_equal(pos.z, 0.1f, FK_TOL),
+	zassert_true(is_near_equal(pos.y, 0.168f, FK_TOL),
+		     "y should be ~0.168 after 90 deg Z rotation");
+	zassert_true(is_near_equal(pos.z, 0.243f, FK_TOL),
 		     "z should be unchanged");
 }
 
 ZTEST_F(forward_kinematics, test_base_rotation_180deg)
 {
-	/* Joint 0: Z-rotation by π → position [0.5, 0, 0.1] → [-0.5, 0, 0.1] */
+	/* Joint 0: Z-rotation by π → position [0.168, 0, 0.243] → [-0.168, 0, 0.243] */
 	float theta[NUM_JOINTS] = {0};
 	theta[0] = (float)M_PI;
 
@@ -100,9 +100,9 @@ ZTEST_F(forward_kinematics, test_base_rotation_180deg)
 						   &pos, &orient);
 
 	zassert_true(ok);
-	zassert_true(is_near_equal(pos.x, -0.5f, FK_TOL));
+	zassert_true(is_near_equal(pos.x, -0.168f, FK_TOL));
 	zassert_true(is_near_equal(pos.y, 0.0f, FK_TOL));
-	zassert_true(is_near_equal(pos.z, 0.1f, FK_TOL));
+	zassert_true(is_near_equal(pos.z, 0.243f, FK_TOL));
 }
 
 /* ======================================================================== */

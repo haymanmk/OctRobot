@@ -8,6 +8,7 @@
 #include "robot_geometry.h"
 #include "hal_flash.h"
 #include <zephyr/kernel.h>
+#include <zephyr/sys/crc.h>
 #include <string.h>
 #include <math.h>
 
@@ -17,27 +18,6 @@
 /* Global robot model instance */
 static poe_robot_model_t g_robot_model;
 static K_MUTEX_DEFINE(g_robot_model_mutex);
-
-/* CRC32 lookup table (for data validation) */
-static const uint32_t crc32_table[256] = {
-	0x00000000, 0x77073096, 0xEE0E612C, 0x990951BA, 0x076DC419, 0x706AF48F,
-	0xE963A535, 0x9E6495A3, 0x0EDB8832, 0x79DCB8A4, 0xE0D5E91E, 0x97D2D988,
-	/* ... (full table omitted for brevity, standard CRC32 table) ... */
-	0xBE2DA0A5, 0x4C4623A6, 0x5F16D052, 0xAD7D5351
-};
-
-/* ========================================================================
- * Helper Functions
- * ======================================================================== */
-
-static uint32_t compute_crc32(const uint8_t *data, size_t len)
-{
-	uint32_t crc = 0xFFFFFFFF;
-	for (size_t i = 0; i < len; i++) {
-		crc = crc32_table[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
-	}
-	return ~crc;
-}
 
 /* ========================================================================
  * Factory Defaults
@@ -88,15 +68,17 @@ poe_robot_model_t robot_geometry_factory_defaults(void)
 	model.screw_axes[5].v = vec3_create(0.0f, 0.243f, 0.0f); /* v = -ω × [0.45,0,0.1] = [0,-0.1,0] */
 	
 	/* ============================================================
-	 * Home Configuration M
+	 * Home Configuration M — Mecharm 270 Pi
 	 * ============================================================
-	 * End-effector pose at θ=[0,0,0,0,0,0]
-	 * Assume: arm straight along +X, end-effector 0.5m from base
+	 * End-effector pose at θ=[0,0,0,0,0,0]:
+	 *   R = [[0, 0, 1], [-1, 0, 0], [0, -1, 0]]
+	 *   p = [0.168, 0, 0.243] m
 	 */
-	model.M = mat4x4_identity();
-	model.M.m[0][3] = 0.5f;  /* X = 0.5m */
-	model.M.m[1][3] = 0.0f;  /* Y = 0m */
-	model.M.m[2][3] = 0.1f;  /* Z = 0.1m (height of base) */
+	model.M = mat4x4_zero();
+	model.M.m[0][2] =  1.0f;  model.M.m[0][3] = 0.168f;
+	model.M.m[1][0] = -1.0f;
+	model.M.m[2][1] = -1.0f;  model.M.m[2][3] = 0.243f;
+	model.M.m[3][3] =  1.0f;
 	
 	/* ============================================================
 	 * Joint Limits (Conservative Defaults)
@@ -109,9 +91,9 @@ poe_robot_model_t robot_geometry_factory_defaults(void)
 	}
 	
 	/* Compute CRC */
-	model.crc32 = compute_crc32((uint8_t*)&model, 
-	                             sizeof(model) - sizeof(uint32_t));
-	
+	model.crc32 = crc32_ieee((uint8_t*)&model,
+	                         sizeof(model) - sizeof(uint32_t));
+
 	return model;
 }
 
@@ -133,8 +115,8 @@ bool robot_geometry_load_from_flash(poe_robot_model_t *model)
 	}
 	
 	/* Validate CRC */
-	uint32_t computed_crc = compute_crc32((uint8_t*)model, 
-	                                       sizeof(*model) - sizeof(uint32_t));
+	uint32_t computed_crc = crc32_ieee((uint8_t*)model,
+	                                   sizeof(*model) - sizeof(uint32_t));
 	if (computed_crc != model->crc32) {
 		/* CRC mismatch, use factory defaults */
 		*model = robot_geometry_factory_defaults();
@@ -156,8 +138,8 @@ bool robot_geometry_save_to_flash(const poe_robot_model_t *model)
 	poe_robot_model_t model_copy = *model;
 	
 	/* Compute and store CRC */
-	model_copy.crc32 = compute_crc32((uint8_t*)&model_copy, 
-	                                  sizeof(model_copy) - sizeof(uint32_t));
+	model_copy.crc32 = crc32_ieee((uint8_t*)&model_copy,
+	                              sizeof(model_copy) - sizeof(uint32_t));
 	
 	/* Write to flash */
 	int ret = hal_flash_write(NVS_KEY_POE_MODEL, 
