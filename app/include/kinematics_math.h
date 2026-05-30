@@ -178,6 +178,13 @@ float mat3x3_trace(const mat3x3_t *m);
 mat3x3_t mat3x3_skew_symmetric(const vec3_t *w);
 
 /**
+ * Rotation matrix from roll-pitch-yaw (ZYX intrinsic) Euler angles.
+ *
+ * R = Rz(yaw) * Ry(pitch) * Rx(roll), angles in radians.
+ */
+mat3x3_t mat3x3_from_rpy(float roll, float pitch, float yaw);
+
+/**
  * Check if matrix is approximately equal (tolerance 1e-6)
  */
 bool mat3x3_is_equal(const mat3x3_t *a, const mat3x3_t *b, float tol);

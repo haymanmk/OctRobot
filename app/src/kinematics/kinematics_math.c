@@ -169,6 +169,29 @@ mat3x3_t mat3x3_skew_symmetric(const vec3_t *w)
 	return result;
 }
 
+mat3x3_t mat3x3_from_rpy(float roll, float pitch, float yaw)
+{
+	float cr = cosf(roll),  sr = sinf(roll);
+	float cp = cosf(pitch), sp = sinf(pitch);
+	float cy = cosf(yaw),   sy = sinf(yaw);
+
+	mat3x3_t R;
+	/* R = Rz(yaw) * Ry(pitch) * Rx(roll) */
+	R.m[0][0] = cy * cp;
+	R.m[0][1] = cy * sp * sr - sy * cr;
+	R.m[0][2] = cy * sp * cr + sy * sr;
+
+	R.m[1][0] = sy * cp;
+	R.m[1][1] = sy * sp * sr + cy * cr;
+	R.m[1][2] = sy * sp * cr - cy * sr;
+
+	R.m[2][0] = -sp;
+	R.m[2][1] = cp * sr;
+	R.m[2][2] = cp * cr;
+
+	return R;
+}
+
 bool mat3x3_is_equal(const mat3x3_t *a, const mat3x3_t *b, float tol)
 {
 	for (int i = 0; i < 3; i++) {
