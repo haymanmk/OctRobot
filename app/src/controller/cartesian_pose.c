@@ -38,6 +38,7 @@ cmove_status_t cartesian_pose_to_joints(const poe_robot_model_t *model,
 			out_theta[i] = out[i];
 		}
 		return CMOVE_OK;
+	/* Solver still writes the final iterate; surface it but flag the limit. */
 	case IK_OUT_OF_LIMITS:
 		for (int i = 0; i < NUM_JOINTS; i++) {
 			out_theta[i] = out[i];
@@ -45,6 +46,7 @@ cmove_status_t cartesian_pose_to_joints(const poe_robot_model_t *model,
 		return CMOVE_OUT_OF_LIMITS;
 	case IK_NO_CONVERGENCE:
 		return CMOVE_NO_SOLUTION;
+	/* Unreachable in practice (NULLs are caught above); mapped defensively. */
 	case IK_INVALID_INPUT:
 	default:
 		return CMOVE_BAD_ARGS;

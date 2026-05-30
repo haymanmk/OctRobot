@@ -13,6 +13,8 @@
 #include "cartesian_pose.h"
 #include <math.h>
 
+/* IK converges to eomg=1e-3 rad / ev=1e-4 m; float32 FK round-trip adds
+ * rounding. 5e-3 leaves margin on the recovered pose. */
 #define CP_POSE_TOL 5e-3f
 
 struct cartesian_pose_fixture {
