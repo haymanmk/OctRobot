@@ -56,6 +56,7 @@ target_sources(app PRIVATE
   src/controller/servo_control.c
   src/controller/joint_map.c
   src/controller/cartesian_pose.c
+  src/controller/cartesian_move.c
 )
 
 # Host communications (to be added in Phase 7)
