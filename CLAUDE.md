@@ -35,7 +35,7 @@ The firmware is organized in phase-based layers, bottom-up:
 ```
 Host Protocol (USB CDC-ACM binary packets)
     ↓
-Motion Controller  (Phase 6 - partial placeholder)
+Motion Controller  (Phase 6 - Cartesian move-to-pose via IK; servo onboard motion)
     ↓
 Kinematics Layer   (Phase 4 - POE FK + body-frame IK complete; offline-validated)
     ↓
@@ -72,7 +72,7 @@ Zephyr RTOS / ESP32-PICO-D4
 | 1–3b  | ✅ Done | Scaffold, HAL, servo driver, USB manual control |
 | 4     | ⏳ In Progress | FK complete; IK solver complete + offline-validated; IK not yet wired to motion control |
 | 5     | ❌ Not started | Trajectory planner (joint-space interpolation) |
-| 6     | ❌ Partial | Motion controller (1 ms loop, PID) |
+| 6     | ⏳ In Progress | Cartesian move-to-pose ($movec: IK→servo) done; servos do onboard PID, no MCU trajectory loop yet |
 | 7–8   | ❌ Not started | Full host protocol, system integration |
 
 ## Logging
