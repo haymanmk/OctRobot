@@ -379,7 +379,19 @@ int uart_console_process_command(const uint8_t *cmd_buf, size_t cmd_len)
         float roll = atof(argv[4]);
         float pitch = atof(argv[5]);
         float yaw = atof(argv[6]);
-        uint16_t time_ms = (argc == 8) ? (uint16_t)atoi(argv[7]) : 1000;
+        uint16_t time_ms = 1000;
+        if (argc == 8) {
+            int t = atoi(argv[7]);
+            if (t <= 0 || t > 60000) {
+                LOG_WRN("movec: invalid TIME_MS %d (1-60000)", t);
+                return -EINVAL;
+            }
+            time_ms = (uint16_t)t;
+        }
+
+        LOG_DBG("movec: target [%.3f %.3f %.3f] rpy[%.1f %.1f %.1f] "
+            "in %u ms", (double)x, (double)y, (double)z,
+            (double)roll, (double)pitch, (double)yaw, time_ms);
 
         cmove_status_t st = cartesian_move_to_pose(x, y, z, roll, pitch,
                                yaw, time_ms);
@@ -387,9 +399,6 @@ int uart_console_process_command(const uint8_t *cmd_buf, size_t cmd_len)
             LOG_WRN("movec failed: status %d", st);
             return -EIO;
         }
-        LOG_INF("movec: moving to [%.3f %.3f %.3f] rpy[%.1f %.1f %.1f] "
-            "in %u ms", (double)x, (double)y, (double)z,
-            (double)roll, (double)pitch, (double)yaw, time_ms);
     }
     /* Teach command */
     else if (strcmp(command, "teach") == 0) {
