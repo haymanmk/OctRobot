@@ -54,6 +54,7 @@ target_sources(app PRIVATE
 # Motion controller (to be added in Phase 6)
 target_sources(app PRIVATE
   src/controller/servo_control.c
+  src/controller/joint_map.c
 )
 
 # Host communications (to be added in Phase 7)

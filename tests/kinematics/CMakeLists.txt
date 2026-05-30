@@ -22,6 +22,7 @@ target_sources(app PRIVATE
   ${APP_SRC_DIR}/src/kinematics/robot_geometry.c
   ${APP_SRC_DIR}/src/kinematics/forward_kinematics_poe.c
   ${APP_SRC_DIR}/src/kinematics/inverse_kinematics_poe.c
+  ${APP_SRC_DIR}/src/controller/joint_map.c
 )
 
 # HAL flash stub (replaces real NVS-based hal_flash.c for test builds)
@@ -38,4 +39,5 @@ target_sources(app PRIVATE
   src/test_inverse_kinematics.c
   src/test_ik_ground_truth.c
   src/test_rpy.c
+  src/test_joint_map.c
 )
