@@ -23,6 +23,7 @@ target_sources(app PRIVATE
   ${APP_SRC_DIR}/src/kinematics/forward_kinematics_poe.c
   ${APP_SRC_DIR}/src/kinematics/inverse_kinematics_poe.c
   ${APP_SRC_DIR}/src/controller/joint_map.c
+  ${APP_SRC_DIR}/src/controller/cartesian_pose.c
 )
 
 # HAL flash stub (replaces real NVS-based hal_flash.c for test builds)
@@ -40,4 +41,5 @@ target_sources(app PRIVATE
   src/test_ik_ground_truth.c
   src/test_rpy.c
   src/test_joint_map.c
+  src/test_cartesian_pose.c
 )
