@@ -6,7 +6,7 @@ Guidance for AI coding agents working in this repository. Agent-agnostic; tool-s
 
 OctroBot — 6-DOF robot arm firmware on M5Stack Atom Lite (ESP32-PICO-D4), Zephyr RTOS v3.6.0. POE forward kinematics; Feetech SCS/STS bus servos over half-duplex UART @ 1 Mbps.
 
-Current focus: **Phase 4** (kinematics — FK done, IK pending). See `## Phase Roadmap` in `CLAUDE.md` for the full picture.
+Current focus: **Phase 6** — Cartesian move-to-pose (`$movec`: IK→servo) is implemented and offline-verified, pending hardware joint-map calibration. Phase 4 kinematics (POE FK + body-frame IK) is complete and offline-validated; Phase 5 trajectory planner is not started. See `## Phase Roadmap` in `CLAUDE.md` for the full picture.
 
 ## Setup
 
@@ -24,9 +24,9 @@ The Makefile auto-sources `~/zephyrproject/.venv`. Override with `ZEPHYR_BASE=..
 | `make flash`     | Flash via esptool.py                                   |
 | `make monitor`   | Serial console (`screen /dev/ttyUSB0 115200`)          |
 | `make bfm`       | build + flash + monitor (primary dev loop)             |
-| `make test`      | Native sim tests + Python FK cross-validation          |
+| `make test`      | Native sim tests + Python FK/IK cross-validation       |
 | `make test-native` | Kinematics math tests (host machine)                 |
-| `make test-py`   | Pytest FK cross-check vs `modern_robotics`             |
+| `make test-py`   | Pytest FK & IK cross-check vs `modern_robotics`        |
 | `make clean`     | Wipe build artifacts                                   |
 
 Python validation (one-time):
@@ -40,15 +40,15 @@ cd validation && pip install -r requirements.txt
 app/src/
 ├── hal/          # half-duplex UART (GPIO 21 TX, 25 RX), e-stop (GPIO 39), NVS
 ├── drivers/      # Feetech wire protocol + servo API
-├── kinematics/   # matrix/vector ops, matrix exp, POE model, FK
-├── comms/        # binary packet protocol (0xAA CMD LEN PAYLOAD CRC8), USB/UART
-├── controller/   # servo_control.c (Phase 6 placeholder)
+├── kinematics/   # matrix/vector ops, matrix exp, POE model, FK + body-frame IK
+├── comms/        # binary packet protocol (0xAA CMD LEN PAYLOAD CRC8), USB/UART; $movec console cmd
+├── controller/   # Cartesian move ($movec: IK→servo), joint_map calibration, servo_control
 └── trajectory/   # Phase 5 — not started
 ```
 
 Out-of-tree:
 - `tests/kinematics/` — Zephyr native_sim test suite for kinematics math
-- `validation/` — Python cross-validation harness (FK vs `modern_robotics`)
+- `validation/` — Python cross-validation harness (FK & IK vs `modern_robotics`)
 - `host_test.py` — interactive CLI that speaks the binary packet protocol
 - `boards/` — board overlays
 - `docs/` — design notes (incl. `FK_TEST_README.md`)
