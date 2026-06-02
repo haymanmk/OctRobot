@@ -8,7 +8,11 @@ pins a virtual tool tip to that point while the arm reconfigures around it.
 Pure functions are importable for tests; main() drives the serial stream.
 """
 
+import os
+
 import numpy as np
+import yaml
+import modern_robotics as mr
 
 # --- RPY <-> matrix (ZYX, replicates app/src/kinematics/kinematics_math.c) ---
 
@@ -38,3 +42,44 @@ def matrix_to_rpy(R):
         pitch = np.arctan2(-R[2, 0], sy)
         yaw = np.arctan2(R[1, 0], R[0, 0])
     return np.degrees([roll, pitch, yaw])
+
+
+# --- robot model -----------------------------------------------------------
+
+
+def load_model(config_path=None):
+    """Load robot_config.yaml into a model dict (reuses the FK/IK test config)."""
+    if config_path is None:
+        config_path = os.path.join(os.path.dirname(__file__), "robot_config.yaml")
+    with open(config_path) as f:
+        cfg = yaml.safe_load(f)
+    Slist = np.array(cfg["screw_axes"], dtype=float).T   # columns = screw axes
+    M = np.array(cfg["home_config"], dtype=float)
+    Blist = mr.Adjoint(mr.TransInv(M)) @ Slist
+    return {
+        "Slist": Slist,
+        "M": M,
+        "Blist": Blist,
+        "jmin": np.array(cfg["joint_limits"]["min"], dtype=float),
+        "jmax": np.array(cfg["joint_limits"]["max"], dtype=float),
+        "n": int(cfg["num_joints"]),
+    }
+
+
+def fk(model, theta):
+    return mr.FKinSpace(model["M"], model["Slist"], np.asarray(theta, dtype=float))
+
+
+def ik_solve(model, T_target, seed, eomg=1e-4, ev=1e-4):
+    """Body-frame IK. Returns (theta wrapped to [-pi,pi], success bool)."""
+    theta, success = mr.IKinBody(model["Blist"], model["M"], T_target,
+                                 np.asarray(seed, dtype=float), eomg, ev)
+    theta = (theta + np.pi) % (2 * np.pi) - np.pi
+    return theta, bool(success)
+
+
+def pose_matrix(p, R):
+    T = np.eye(4)
+    T[:3, :3] = R
+    T[:3, 3] = np.asarray(p, dtype=float)
+    return T
