@@ -9,7 +9,7 @@
 #include "kinematics_math.h"   /* deg_to_rad / rad_to_deg */
 #include <string.h>
 
-static float s_sign[NUM_JOINTS]       = { 1, 1, 1, 1, 1, 1 };
+static float s_sign[NUM_JOINTS]       = { -1, 1, 1, -1, 1, -1 };
 static float s_offset_deg[NUM_JOINTS] = { 0, 0, 0, 0, 0, 0 };
 
 void joint_map_model_to_servo(const float theta_rad[NUM_JOINTS],
