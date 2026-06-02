@@ -298,3 +298,33 @@ def validate_sequence(model, frames, continuity_rad=0.15):
         "min_margin": (None if not np.isfinite(min_margin) else float(min_margin)),
         "n": len(frames),
     }
+
+
+# --- output formatting + pacing -------------------------------------------
+
+
+def format_movec(p, rpy, time_ms):
+    """Render one '$movec X Y Z ROLL PITCH YAW TIME_MS' console line."""
+    return ("$movec "
+            f"{p[0]:.4f} {p[1]:.4f} {p[2]:.4f} "
+            f"{rpy[0]:.2f} {rpy[1]:.2f} {rpy[2]:.2f} {int(time_ms)}")
+
+
+def _rot_angle(Ra, Rb):
+    """Geodesic angle (rad) between two rotation matrices."""
+    Rrel = Ra.T @ Rb
+    return np.arccos(np.clip((np.trace(Rrel) - 1.0) / 2.0, -1.0, 1.0))
+
+
+def time_ms_for(prev_frame, cur_frame, speed_mps, min_ms=40, max_ms=2000,
+                rot_speed_dps=60.0):
+    """Per-segment duration from translation AND rotation, whichever is slower.
+
+    Keeps the pinned-tip act (tiny translation, large rotation) watchable."""
+    if prev_frame is None:
+        return 1000
+    pp, Rp = prev_frame
+    pc, Rc = cur_frame
+    t_pos = (np.linalg.norm(pc - pp) / speed_mps * 1000.0) if speed_mps > 0 else 0.0
+    t_rot = np.degrees(_rot_angle(Rp, Rc)) / rot_speed_dps * 1000.0
+    return int(np.round(np.clip(max(t_pos, t_rot), min_ms, max_ms)))

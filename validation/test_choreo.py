@@ -173,3 +173,23 @@ def test_default_presets_pass_validation():
         assert report["errors"] == [], (
             f"act '{act_name}' has bad frames: {report['errors'][:5]} "
             f"(max_step={report['max_step']:.3f}, min_margin={report['min_margin']})")
+
+
+def test_format_movec_line():
+    p = np.array([0.168, 0.0, 0.243])
+    rpy = (-90.0, 0.0, -90.0)
+    line = choreo.format_movec(p, rpy, 1000)
+    assert line == "$movec 0.1680 0.0000 0.2430 -90.00 0.00 -90.00 1000"
+
+
+def test_time_ms_scales_with_motion():
+    home = (np.array([0.0, 0.0, 0.0]), np.eye(3))
+    far = (np.array([0.10, 0.0, 0.0]), np.eye(3))
+    t_small = choreo.time_ms_for(home, home, speed_mps=0.05)
+    t_big = choreo.time_ms_for(home, far, speed_mps=0.05)
+    assert t_big > t_small
+    assert 40 <= t_small <= 2000 and 40 <= t_big <= 2000
+    # an intermediate distance exercises the unclamped linear regime:
+    # 0.02 m / 0.05 m/s = 0.4 s = 400 ms (rotation is zero here)
+    mid = (np.array([0.02, 0.0, 0.0]), np.eye(3))
+    assert choreo.time_ms_for(home, mid, speed_mps=0.05) == 400
