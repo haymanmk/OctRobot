@@ -1,0 +1,40 @@
+#!/usr/bin/env python3
+"""choreo.py — IK reveal demo choreographer.
+
+Generates, validates, and streams a pose sequence that reveals the inverse
+kinematics: Act 1 aims a virtual tool axis at an invisible fixed point; Act 2
+pins a virtual tool tip to that point while the arm reconfigures around it.
+
+Pure functions are importable for tests; main() drives the serial stream.
+"""
+
+import numpy as np
+
+# --- RPY <-> matrix (ZYX, replicates app/src/kinematics/kinematics_math.c) ---
+
+
+def rpy_to_matrix(roll_deg, pitch_deg, yaw_deg):
+    """R = Rz(yaw) * Ry(pitch) * Rx(roll). Angles in degrees. Matches firmware."""
+    r, p, y = np.radians([roll_deg, pitch_deg, yaw_deg])
+    cr, sr = np.cos(r), np.sin(r)
+    cp, sp = np.cos(p), np.sin(p)
+    cy, sy = np.cos(y), np.sin(y)
+    return np.array([
+        [cy * cp, cy * sp * sr - sy * cr, cy * sp * cr + sy * sr],
+        [sy * cp, sy * sp * sr + cy * cr, sy * sp * cr - cy * sr],
+        [-sp,     cp * sr,                cp * cr],
+    ])
+
+
+def matrix_to_rpy(R):
+    """Inverse of rpy_to_matrix. Returns (roll, pitch, yaw) in degrees, ZYX."""
+    sy = np.hypot(R[0, 0], R[1, 0])
+    if sy < 1e-6:  # gimbal lock: pitch = +/-90
+        roll = np.arctan2(-R[1, 2], R[1, 1])
+        pitch = np.arctan2(-R[2, 0], sy)
+        yaw = 0.0
+    else:
+        roll = np.arctan2(R[2, 1], R[2, 2])
+        pitch = np.arctan2(-R[2, 0], sy)
+        yaw = np.arctan2(R[1, 0], R[0, 0])
+    return np.degrees([roll, pitch, yaw])
