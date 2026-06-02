@@ -83,3 +83,59 @@ def pose_matrix(p, R):
     T[:3, :3] = R
     T[:3, 3] = np.asarray(p, dtype=float)
     return T
+
+
+# --- pose constraints ------------------------------------------------------
+
+TOOL_LENGTH = 0.02  # metres; virtual tool tip distance along flange +Z
+
+
+def orientation_from_axis(axis, prev_R=None):
+    """Build a rotation whose local +Z points along `axis`.
+
+    The roll-about-axis DOF is free; if prev_R is given, choose it to minimize
+    change from the previous frame (continuity). Otherwise use a world up-vector.
+    """
+    z = np.asarray(axis, dtype=float)
+    z = z / np.linalg.norm(z)
+    up = np.array([0.0, 0.0, 1.0])
+    if abs(np.dot(z, up)) > 0.95:    # axis nearly vertical: pick a different ref
+        up = np.array([1.0, 0.0, 0.0])
+    x = np.cross(up, z)
+    x = x / np.linalg.norm(x)
+    y = np.cross(z, x)
+    R = np.column_stack([x, y, z])
+    if prev_R is not None:
+        R = _align_roll(R, prev_R, z)
+    return R
+
+
+def _align_roll(R, prev_R, z):
+    """Rotate R about `z` so its x-axis best matches prev_R's x-axis projected
+    onto the plane perpendicular to `z`."""
+    x_prev = prev_R[:, 0]
+    x_prev_p = x_prev - np.dot(x_prev, z) * z   # project onto plane perp to z
+    n = np.linalg.norm(x_prev_p)
+    if n < 1e-6:
+        return R
+    x_prev_p /= n
+    cos_a = np.clip(np.dot(R[:, 0], x_prev_p), -1.0, 1.0)
+    sin_a = np.dot(np.cross(R[:, 0], x_prev_p), z)
+    angle = np.arctan2(sin_a, cos_a)
+    return _rot_about(z, angle) @ R
+
+
+def _rot_about(axis, angle):
+    """Rodrigues rotation matrix about a unit `axis` by `angle` radians."""
+    a = np.asarray(axis, dtype=float)
+    a = a / np.linalg.norm(a)
+    K = np.array([[0, -a[2], a[1]],
+                  [a[2], 0, -a[0]],
+                  [-a[1], a[0], 0]])
+    return np.eye(3) + np.sin(angle) * K + (1 - np.cos(angle)) * (K @ K)
+
+
+def pin_pose(target, R, L=TOOL_LENGTH):
+    """Flange pose whose virtual tool tip lands on `target` at orientation R."""
+    p = np.asarray(target, dtype=float) - R @ np.array([0.0, 0.0, L])
+    return p, R.copy()
