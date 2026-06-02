@@ -162,3 +162,14 @@ def test_validate_passes_clean_short_sequence():
     report = choreo.validate_sequence(m, frames)
     assert report["errors"] == []
     assert report["n"] == 5
+
+
+def test_default_presets_pass_validation():
+    m = choreo.load_model()
+    seq = choreo.build_sequence(choreo.DEFAULT_CONFIG)
+    for act_name, frames in seq.items():
+        report = choreo.validate_sequence(
+            m, frames, continuity_rad=choreo.DEFAULT_CONFIG.continuity_rad)
+        assert report["errors"] == [], (
+            f"act '{act_name}' has bad frames: {report['errors'][:5]} "
+            f"(max_step={report['max_step']:.3f}, min_margin={report['min_margin']})")

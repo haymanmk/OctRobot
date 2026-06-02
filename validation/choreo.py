@@ -200,7 +200,7 @@ def spherical_sweep(base_dir, half_angle_deg, turns, n):
 
 @dataclass
 class Config:
-    target: tuple = (0.20, 0.0, 0.18)   # invisible fixed point, base frame (m)
+    target: tuple = (0.18, 0.0, 0.24)   # invisible fixed point, base frame (m)
     tool_length: float = TOOL_LENGTH
     aim_n: int = 120
     pin_n: int = 120
@@ -214,15 +214,15 @@ DEFAULT_CONFIG = Config()
 def build_aim_act(target, n=120):
     """Act 1: flange orbits + traces a figure-8 while the tool axis aims at T."""
     target = np.asarray(target, dtype=float)
-    center = target + np.array([-0.10, 0.0, 0.02])   # stand off from the target
+    center = target + np.array([0.0, 0.0, -0.08])   # stand off below the target
     frames = []
     prev = None
     half = n // 2
-    for p in orbit(center, radius=0.06, n=half, normal=(0, 0, 1)):
+    for p in orbit(center, radius=0.035, n=half, normal=(1, 0, 0)):
         R = orientation_from_axis(target - p, prev)
         prev = R
         frames.append((p, R))
-    for p in figure_eight(center, size=0.05, n=n - half, normal=(0, 1, 0)):
+    for p in figure_eight(center, size=0.03, n=n - half, normal=(1, 0, 0)):
         R = orientation_from_axis(target - p, prev)
         prev = R
         frames.append((p, R))
@@ -232,10 +232,10 @@ def build_aim_act(target, n=120):
 def build_pin_act(target, L=TOOL_LENGTH, n=120):
     """Act 2: tool tip pinned at T while the tool axis sweeps a cone."""
     target = np.asarray(target, dtype=float)
-    base_dir = np.array([-1.0, 0.0, 0.0])   # nominal tool axis (points toward base)
+    base_dir = np.array([0.0, 0.0, 1.0])   # nominal tool axis (points up at target)
     frames = []
     prev = None
-    for d in spherical_sweep(base_dir, half_angle_deg=35, turns=2.0, n=n):
+    for d in spherical_sweep(base_dir, half_angle_deg=22, turns=1.5, n=n):
         R = orientation_from_axis(d, prev)
         prev = R
         p, _ = pin_pose(target, R, L)
