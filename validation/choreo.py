@@ -251,3 +251,50 @@ def build_sequence(config=None):
         "aim": build_aim_act(config.target, n=config.aim_n),
         "pin": build_pin_act(config.target, L=config.tool_length, n=config.pin_n),
     }
+
+
+# --- validation gate -------------------------------------------------------
+
+
+def _ang_diff(a, b):
+    """Element-wise shortest angular distance |a-b| wrapped to [0, pi]."""
+    d = (a - b + np.pi) % (2 * np.pi) - np.pi
+    return np.abs(d)
+
+
+def validate_sequence(model, frames, continuity_rad=0.15):
+    """IK-check every frame offline. Returns a report dict:
+
+        errors:    list of (frame_index, reason) — empty means the take is safe
+        max_step:  largest per-frame joint move (rad), shortest-arc
+        min_margin: smallest distance to a joint limit (rad) over the sequence
+        n:         number of frames
+    """
+    seed = np.zeros(model["n"])
+    prev_theta = None
+    errors = []
+    max_step = 0.0
+    min_margin = np.inf
+    for idx, (p, R) in enumerate(frames):
+        T = pose_matrix(p, R)
+        theta, ok = ik_solve(model, T, seed)
+        if not ok:
+            errors.append((idx, "no_convergence"))
+            continue
+        if np.any(theta < model["jmin"]) or np.any(theta > model["jmax"]):
+            errors.append((idx, "joint_limit"))
+        margin = min((theta - model["jmin"]).min(), (model["jmax"] - theta).min())
+        min_margin = min(min_margin, margin)
+        if prev_theta is not None:
+            step = float(np.max(_ang_diff(theta, prev_theta)))
+            max_step = max(max_step, step)
+            if step > continuity_rad:
+                errors.append((idx, f"discontinuity {step:.3f} rad"))
+        prev_theta = theta
+        seed = theta
+    return {
+        "errors": errors,
+        "max_step": max_step,
+        "min_margin": (None if not np.isfinite(min_margin) else float(min_margin)),
+        "n": len(frames),
+    }

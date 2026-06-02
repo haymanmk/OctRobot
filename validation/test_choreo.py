@@ -132,3 +132,33 @@ def test_presets_exist_and_return_frames():
     assert "aim" in seq and "pin" in seq
     assert len(seq["aim"]) == choreo.DEFAULT_CONFIG.aim_n
     assert len(seq["pin"]) == choreo.DEFAULT_CONFIG.pin_n
+
+
+def test_validate_flags_unreachable():
+    m = choreo.load_model()
+    # A target 5 m away is far outside the workspace -> IK cannot converge.
+    bad = choreo.build_pin_act(np.array([5.0, 0.0, 0.0]), L=0.02, n=10)
+    report = choreo.validate_sequence(m, bad)
+    assert len(report["errors"]) > 0
+
+
+def test_validate_flags_discontinuity():
+    m = choreo.load_model()
+    # Two reachable poses that are far apart in joint space: the second forces
+    # a ~0.6 rad jump on joint 0, which must trip the continuity check.
+    Ta = choreo.fk(m, np.zeros(6))
+    Tb = choreo.fk(m, np.array([0.6, 0.0, 0.0, 0.0, 0.0, 0.0]))
+    frames = [(Ta[:3, 3].copy(), Ta[:3, :3].copy()),
+              (Tb[:3, 3].copy(), Tb[:3, :3].copy())]
+    report = choreo.validate_sequence(m, frames, continuity_rad=0.1)
+    assert any("discontinuity" in e[1] for e in report["errors"])
+    assert report["max_step"] > 0.1
+
+
+def test_validate_passes_clean_short_sequence():
+    m = choreo.load_model()
+    home = choreo.fk(m, np.zeros(6))
+    frames = [(home[:3, 3].copy(), home[:3, :3].copy()) for _ in range(5)]
+    report = choreo.validate_sequence(m, frames)
+    assert report["errors"] == []
+    assert report["n"] == 5
