@@ -77,3 +77,32 @@ def test_orientation_from_axis_roll_continuity():
     dot_with = np.dot(R1[:, 0], R2[:, 0])
     dot_without = np.dot(R1[:, 0], choreo.orientation_from_axis(axis2)[:, 0])
     assert dot_with >= dot_without - 1e-6
+
+
+def test_orbit_lies_on_circle():
+    center = np.array([0.1, 0.0, 0.2])
+    pts = choreo.orbit(center, radius=0.05, n=24, normal=(0, 0, 1))
+    assert len(pts) == 24
+    for q in pts:
+        # distance from center is the radius, and z stays in the plane
+        assert abs(np.linalg.norm(q - center) - 0.05) < 1e-9
+        assert abs((q - center)[2]) < 1e-9   # normal is +z -> constant height
+
+
+def test_figure_eight_count_and_centered():
+    center = np.array([0.1, 0.0, 0.2])
+    pts = choreo.figure_eight(center, size=0.04, n=40, normal=(0, 1, 0))
+    assert len(pts) == 40
+    # mean is approximately the center (lemniscate is symmetric)
+    np.testing.assert_allclose(np.mean(pts, axis=0), center, atol=1e-10)
+
+
+def test_spherical_sweep_unit_dirs_near_base():
+    base = np.array([-1.0, 0.0, 0.0])
+    dirs = choreo.spherical_sweep(base, half_angle_deg=30, turns=2.0, n=50)
+    assert len(dirs) == 50
+    for d in dirs:
+        assert abs(np.linalg.norm(d) - 1.0) < 1e-9          # unit vectors
+        assert np.degrees(np.arccos(np.clip(np.dot(d, base / np.linalg.norm(base)), -1, 1))) <= 30 + 1e-6
+    np.testing.assert_allclose(dirs[0], base / np.linalg.norm(base), atol=1e-12)
+    np.testing.assert_allclose(dirs[-1], base / np.linalg.norm(base), atol=1e-12)

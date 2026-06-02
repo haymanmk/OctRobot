@@ -139,3 +139,56 @@ def pin_pose(target, R, L=TOOL_LENGTH):
     """Flange pose whose virtual tool tip lands on `target` at orientation R."""
     p = np.asarray(target, dtype=float) - R @ np.array([0.0, 0.0, L])
     return p, R.copy()
+
+
+# --- parametric path primitives -------------------------------------------
+
+
+def _plane_basis(normal):
+    """Two orthonormal vectors spanning the plane perpendicular to `normal`."""
+    n = np.asarray(normal, dtype=float)
+    n = n / np.linalg.norm(n)
+    ref = np.array([1.0, 0.0, 0.0]) if abs(n[0]) < 0.9 else np.array([0.0, 1.0, 0.0])
+    u = np.cross(n, ref)
+    u = u / np.linalg.norm(u)
+    v = np.cross(n, u)
+    return u, v
+
+
+def orbit(center, radius, n, normal=(0, 0, 1), phase0=0.0):
+    """`n` points on a circle of `radius` around `center` in the given plane."""
+    center = np.asarray(center, dtype=float)
+    u, v = _plane_basis(normal)
+    pts = []
+    for i in range(n):
+        a = phase0 + 2 * np.pi * i / n
+        pts.append(center + radius * (np.cos(a) * u + np.sin(a) * v))
+    return pts
+
+
+def figure_eight(center, size, n, normal=(0, 0, 1)):
+    """`n` points on a Gerono lemniscate (figure-8) centered at `center`."""
+    center = np.asarray(center, dtype=float)
+    u, v = _plane_basis(normal)
+    pts = []
+    for i in range(n):
+        t = 2 * np.pi * i / n
+        pts.append(center + size * np.cos(t) * u + size * np.sin(t) * np.cos(t) * v)
+    return pts
+
+
+def spherical_sweep(base_dir, half_angle_deg, turns, n):
+    """`n` unit directions spiralling out to `half_angle_deg` off `base_dir`
+    and back, winding `turns` times around it. Used to sweep the tool axis."""
+    base = np.asarray(base_dir, dtype=float)
+    base = base / np.linalg.norm(base)
+    u, v = _plane_basis(base)
+    dirs = []
+    for i in range(n):
+        frac = i / (n - 1) if n > 1 else 0.0
+        ang = np.radians(half_angle_deg) * np.sin(np.pi * frac)  # out and back
+        az = 2 * np.pi * turns * frac
+        d = (np.cos(ang) * base
+             + np.sin(ang) * (np.cos(az) * u + np.sin(az) * v))
+        dirs.append(d / np.linalg.norm(d))
+    return dirs
