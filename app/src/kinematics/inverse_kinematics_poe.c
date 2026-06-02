@@ -70,8 +70,13 @@ ik_params_t inverse_kinematics_default_params(void)
 	ik_params_t p = {
 		.eomg = 1e-3f,
 		.ev = 1e-4f,
-		.max_iters = 20,
-		.lambda = 0.0f,
+		.max_iters = 50,
+		/* Damped least-squares: lambda>0 keeps JJ^T invertible at singular
+		 * configs (lambda=0 aborts the solve there) and caps the step gain
+		 * near singularities at ~1/(2*lambda), so far targets converge
+		 * instead of overshooting. Small enough not to spoil the tight
+		 * eomg/ev tolerance for well-conditioned poses. */
+		.lambda = 0.01f,
 	};
 	return p;
 }

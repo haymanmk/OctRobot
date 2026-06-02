@@ -38,8 +38,8 @@ ZTEST_F(inverse_kinematics, test_default_params)
 	ik_params_t p = inverse_kinematics_default_params();
 	zassert_true(is_near_equal(p.eomg, 1e-3f, 1e-9f), "eomg default");
 	zassert_true(is_near_equal(p.ev, 1e-4f, 1e-9f), "ev default");
-	zassert_equal(p.max_iters, 20, "max_iters default");
-	zassert_true(is_near_equal(p.lambda, 0.0f, 1e-9f), "lambda default");
+	zassert_equal(p.max_iters, 50, "max_iters default");
+	zassert_true(is_near_equal(p.lambda, 0.01f, 1e-9f), "lambda default");
 }
 
 ZTEST_F(inverse_kinematics, test_null_inputs_rejected)
