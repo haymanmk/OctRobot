@@ -430,27 +430,58 @@ int feetech_servo_sync_write_positions_timed(const uint8_t *ids,
 		return HAL_INVALID;
 	}
 
+	if (time_ms == 0) {
+		time_ms = 1;  /* avoid divide-by-zero; treat as "as fast as allowed" */
+	}
+
 	/*
+	 * These servos move under GOAL_SPEED (steps/s), NOT GOAL_TIME: a speed of 0
+	 * means "hold" (no motion), and the protocol manual's motion examples always
+	 * use a non-zero speed with the time field at 0. To honor move_time_ms we
+	 * read each joint's current position and set a per-joint speed so every
+	 * joint covers its own travel in ~time_ms and they finish together.
+	 *
 	 * Pack 6 bytes per servo (0x2A-0x2F):
 	 * - Position (2 bytes)
-	 * - Time (2 bytes) = move duration; non-zero engages time-based motion
-	 * - Speed (2 bytes) = 0 so the time field governs the trajectory
+	 * - Time     (2 bytes) = 0 (unused; speed governs the trajectory)
+	 * - Speed    (2 bytes) = |goal - current| / time, clamped
 	 */
+	uint16_t current[FEETECH_MAX_SERVOS];
+	bool have_current =
+		(feetech_servo_read_multi_positions(ids, current, count) == 0);
+
 	uint8_t data[FEETECH_MAX_SERVOS * 6];
 	for (uint8_t i = 0; i < count; i++) {
+		uint32_t delta;
+		if (have_current) {
+			delta = (positions[i] >= current[i])
+				? (uint32_t)(positions[i] - current[i])
+				: (uint32_t)(current[i] - positions[i]);
+		} else {
+			delta = FEETECH_POS_CENTER;  /* unknown travel: mid-range speed */
+		}
+
+		uint32_t speed = (delta * 1000u) / time_ms;  /* steps per second */
+		if (speed < FEETECH_TIMED_SPEED_MIN) {
+			speed = FEETECH_TIMED_SPEED_MIN;
+		} else if (speed > FEETECH_TIMED_SPEED_MAX) {
+			speed = FEETECH_TIMED_SPEED_MAX;
+		}
+
 		data[i * 6 + 0] = (uint8_t)(positions[i] & 0xFF);
 		data[i * 6 + 1] = (uint8_t)((positions[i] >> 8) & 0xFF);
-		data[i * 6 + 2] = (uint8_t)(time_ms & 0xFF);
-		data[i * 6 + 3] = (uint8_t)((time_ms >> 8) & 0xFF);
-		data[i * 6 + 4] = 0;
-		data[i * 6 + 5] = 0;
+		data[i * 6 + 2] = 0;
+		data[i * 6 + 3] = 0;
+		data[i * 6 + 4] = (uint8_t)(speed & 0xFF);
+		data[i * 6 + 5] = (uint8_t)((speed >> 8) & 0xFF);
 	}
 
 	int ret = feetech_protocol_sync_write(servo_uart, FEETECH_REG_GOAL_POSITION_L,
 	                                      6, ids, data, count);
 
 	if (ret == HAL_OK) {
-		LOG_DBG("Sync write %d timed positions (%u ms)", count, time_ms);
+		LOG_DBG("Sync write %d timed positions (~%u ms, speed-based)", count,
+			time_ms);
 	}
 
 	return ret;

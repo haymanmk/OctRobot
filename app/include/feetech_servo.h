@@ -27,6 +27,12 @@
 #define FEETECH_VEL_MAX      4095
 #define FEETECH_DEFAULT_SPEED 1000  /* Default speed in steps/second (~50% max) */
 
+/* Speed clamp for time-based moves. These servos move under GOAL_SPEED, not
+ * GOAL_TIME, and a speed of 0 means "hold" (no motion). The floor guarantees
+ * even tiny moves actuate; the cap keeps bring-up moves gentle. */
+#define FEETECH_TIMED_SPEED_MIN  50
+#define FEETECH_TIMED_SPEED_MAX  2000
+
 /* Maximum number of servos in robot */
 #define FEETECH_MAX_SERVOS   6
 
