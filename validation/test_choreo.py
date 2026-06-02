@@ -1,3 +1,5 @@
+import json
+
 import numpy as np
 import choreo
 
@@ -193,3 +195,18 @@ def test_time_ms_scales_with_motion():
     # 0.02 m / 0.05 m/s = 0.4 s = 400 ms (rotation is zero here)
     mid = (np.array([0.02, 0.0, 0.0]), np.eye(3))
     assert choreo.time_ms_for(home, mid, speed_mps=0.05) == 400
+
+
+def test_frames_to_jsonl_roundtrip(tmp_path):
+    target = np.array([0.20, 0.0, 0.18])
+    frames = choreo.build_pin_act(target, L=0.02, n=5)
+    out = tmp_path / "take.jsonl"
+    choreo.dump_jsonl(frames, str(out), act="pin")
+    lines = out.read_text().strip().splitlines()
+    assert len(lines) == 5
+    rec = json.loads(lines[0])
+    assert rec["act"] == "pin"
+    assert len(rec["xyz"]) == 3 and len(rec["rpy"]) == 3
+    # xyz matches the frame's flange position
+    np.testing.assert_allclose(rec["xyz"], frames[0][0], atol=1e-9)
+    np.testing.assert_allclose(rec["rpy"], choreo.matrix_to_rpy(frames[0][1]), atol=1e-9)

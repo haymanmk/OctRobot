@@ -8,6 +8,7 @@ pins a virtual tool tip to that point while the arm reconfigures around it.
 Pure functions are importable for tests; main() drives the serial stream.
 """
 
+import json
 import os
 from dataclasses import dataclass
 
@@ -328,3 +329,18 @@ def time_ms_for(prev_frame, cur_frame, speed_mps, min_ms=40, max_ms=2000,
     t_pos = (np.linalg.norm(pc - pp) / speed_mps * 1000.0) if speed_mps > 0 else 0.0
     t_rot = np.degrees(_rot_angle(Rp, Rc)) / rot_speed_dps * 1000.0
     return int(np.round(np.clip(max(t_pos, t_rot), min_ms, max_ms)))
+
+
+# --- reproducible take dump ------------------------------------------------
+
+
+def dump_jsonl(frames, path, act):
+    """Write one JSON object per frame: {act, xyz[3], rpy[3]} (rpy in degrees, ZYX)."""
+    with open(path, "w") as f:
+        for p, R in frames:
+            rpy = matrix_to_rpy(R)
+            f.write(json.dumps({
+                "act": act,
+                "xyz": [float(v) for v in p],
+                "rpy": [float(v) for v in rpy],
+            }) + "\n")
