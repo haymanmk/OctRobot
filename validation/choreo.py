@@ -9,6 +9,7 @@ Pure functions are importable for tests; main() drives the serial stream.
 """
 
 import os
+from dataclasses import dataclass
 
 import numpy as np
 import yaml
@@ -192,3 +193,61 @@ def spherical_sweep(base_dir, half_angle_deg, turns, n):
              + np.sin(ang) * (np.cos(az) * u + np.sin(az) * v))
         dirs.append(d / np.linalg.norm(d))
     return dirs
+
+
+# --- act builders + presets ------------------------------------------------
+
+
+@dataclass
+class Config:
+    target: tuple = (0.20, 0.0, 0.18)   # invisible fixed point, base frame (m)
+    tool_length: float = TOOL_LENGTH
+    aim_n: int = 120
+    pin_n: int = 120
+    speed_mps: float = 0.05             # EE speed -> per-segment TIME_MS
+    continuity_rad: float = 0.15        # max joint step between frames (rad)
+
+
+DEFAULT_CONFIG = Config()
+
+
+def build_aim_act(target, n=120):
+    """Act 1: flange orbits + traces a figure-8 while the tool axis aims at T."""
+    target = np.asarray(target, dtype=float)
+    center = target + np.array([-0.10, 0.0, 0.02])   # stand off from the target
+    frames = []
+    prev = None
+    half = n // 2
+    for p in orbit(center, radius=0.06, n=half, normal=(0, 0, 1)):
+        R = orientation_from_axis(target - p, prev)
+        prev = R
+        frames.append((p, R))
+    for p in figure_eight(center, size=0.05, n=n - half, normal=(0, 1, 0)):
+        R = orientation_from_axis(target - p, prev)
+        prev = R
+        frames.append((p, R))
+    return frames
+
+
+def build_pin_act(target, L=TOOL_LENGTH, n=120):
+    """Act 2: tool tip pinned at T while the tool axis sweeps a cone."""
+    target = np.asarray(target, dtype=float)
+    base_dir = np.array([-1.0, 0.0, 0.0])   # nominal tool axis (points toward base)
+    frames = []
+    prev = None
+    for d in spherical_sweep(base_dir, half_angle_deg=35, turns=2.0, n=n):
+        R = orientation_from_axis(d, prev)
+        prev = R
+        p, _ = pin_pose(target, R, L)
+        frames.append((p, R))
+    return frames
+
+
+def build_sequence(config=None):
+    """Return {'aim': [...frames...], 'pin': [...frames...]} for the two acts."""
+    if config is None:
+        config = Config()
+    return {
+        "aim": build_aim_act(config.target, n=config.aim_n),
+        "pin": build_pin_act(config.target, L=config.tool_length, n=config.pin_n),
+    }

@@ -106,3 +106,29 @@ def test_spherical_sweep_unit_dirs_near_base():
         assert np.degrees(np.arccos(np.clip(np.dot(d, base / np.linalg.norm(base)), -1, 1))) <= 30 + 1e-6
     np.testing.assert_allclose(dirs[0], base / np.linalg.norm(base), atol=1e-12)
     np.testing.assert_allclose(dirs[-1], base / np.linalg.norm(base), atol=1e-12)
+
+
+def test_build_aim_act_frames_point_at_target():
+    target = np.array([0.20, 0.0, 0.18])
+    frames = choreo.build_aim_act(target, n=60)
+    assert len(frames) == 60
+    for p, R in frames:
+        z = R[:, 2]
+        want = (target - p) / np.linalg.norm(target - p)
+        np.testing.assert_allclose(z, want, atol=1e-6)
+
+
+def test_build_pin_act_tip_stays_on_target():
+    target = np.array([0.20, 0.0, 0.18])
+    frames = choreo.build_pin_act(target, L=0.02, n=60)
+    assert len(frames) == 60
+    for p, R in frames:
+        tip = p + R @ np.array([0.0, 0.0, 0.02])
+        np.testing.assert_allclose(tip, target, atol=1e-9)
+
+
+def test_presets_exist_and_return_frames():
+    seq = choreo.build_sequence(choreo.DEFAULT_CONFIG)
+    assert "aim" in seq and "pin" in seq
+    assert len(seq["aim"]) == choreo.DEFAULT_CONFIG.aim_n
+    assert len(seq["pin"]) == choreo.DEFAULT_CONFIG.pin_n
