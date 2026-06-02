@@ -344,3 +344,113 @@ def dump_jsonl(frames, path, act):
                 "xyz": [float(v) for v in p],
                 "rpy": [float(v) for v in rpy],
             }) + "\n")
+
+
+# --- serial streaming + CLI ------------------------------------------------
+
+
+def stream_frames(ser, frames, speed_mps, act_label, dry_run=False):
+    """Send each frame as a $movec line, pacing TIME_MS by motion. Returns
+    the number of frames sent. `ser` may be None when dry_run is True."""
+    import time
+    prev = None
+    sent = 0
+    for p, R in frames:
+        time_ms = time_ms_for(prev, (p, R), speed_mps)
+        line = format_movec(p, matrix_to_rpy(R), time_ms)
+        if dry_run:
+            print(line)
+        else:
+            ser.write((line + "\n").encode())
+            # pace the host so commands don't outrun the onboard motion
+            time.sleep(time_ms / 1000.0)
+        prev = (p, R)
+        sent += 1
+    print(f"[{act_label}] sent {sent} frames")
+    return sent
+
+
+def print_preflight(config):
+    print("=== PRE-FLIGHT CHECKLIST ===")
+    print("  [auto] '$power 1' will be sent before motion")
+    print("  [you ] joint-map calibration flashed to the arm?")
+    print("  [you ] firmware built UNICORE (CONFIG_SMP=n)?")
+    print(f"  [gate] target {config.target} validated below")
+    print("============================")
+
+
+def main(argv=None):
+    import argparse
+    ap = argparse.ArgumentParser(description="IK reveal demo choreographer")
+    ap.add_argument("--port", help="serial port, e.g. /dev/ttyUSB0")
+    ap.add_argument("--dry-run", action="store_true",
+                    help="print $movec lines instead of sending")
+    ap.add_argument("--validate-only", action="store_true",
+                    help="run the offline gate and report; no output stream")
+    ap.add_argument("--target", nargs=3, type=float, metavar=("X", "Y", "Z"),
+                    help="override the invisible target point (m)")
+    ap.add_argument("--speed", type=float, help="EE speed m/s (pacing)")
+    ap.add_argument("--dump", help="write resolved poses to this .jsonl path")
+    args = ap.parse_args(argv)
+
+    config = Config()
+    if args.target:
+        config.target = tuple(args.target)
+    if args.speed is not None:
+        config.speed_mps = args.speed
+
+    model = load_model()
+    seq = build_sequence(config)
+
+    # Stage 3: validation gate — fail before any serial output.
+    failed = False
+    for act_name, frames in seq.items():
+        report = validate_sequence(model, frames, config.continuity_rad)
+        print(f"[{act_name}] frames={report['n']} max_step={report['max_step']:.3f} "
+              f"rad min_margin={report['min_margin']} errors={len(report['errors'])}")
+        if report["errors"]:
+            failed = True
+            for idx, reason in report["errors"][:10]:
+                print(f"    frame {idx}: {reason}")
+    if failed:
+        print("VALIDATION FAILED — fix geometry/target before filming.")
+        return 1
+
+    if args.dump:
+        base = args.dump[:-6] if args.dump.endswith(".jsonl") else args.dump
+        for act_name, frames in seq.items():
+            path = f"{base}.{act_name}.jsonl"
+            dump_jsonl(frames, path, act_name)
+            print(f"wrote {path}")
+
+    if args.validate_only:
+        print("Validation OK.")
+        return 0
+
+    print_preflight(config)
+
+    if args.dry_run:
+        ser = None
+    else:
+        if not args.port:
+            print("ERROR: --port required unless --dry-run/--validate-only")
+            return 2
+        import serial
+        ser = serial.Serial(args.port, 115200, timeout=0.1)
+        ser.write(b"$power 1\n")     # precondition: servos must be powered
+        import time
+        time.sleep(0.5)
+
+    stream_frames(ser, seq["aim"], config.speed_mps, "aim", args.dry_run)
+    input(">>> Act 1 (aim) done. Reposition camera, press Enter for Act 2 (pin)...")
+    stream_frames(ser, seq["pin"], config.speed_mps, "pin", args.dry_run)
+
+    if ser is not None:
+        ser.close()
+    print("Done.")
+    return 0
+
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(main())
