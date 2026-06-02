@@ -59,7 +59,7 @@ ZTEST_F(cartesian_pose, test_round_trip)
 	cmove_status_t st = cartesian_pose_to_joints(
 		&fixture->model, p.x, p.y, p.z,
 		rad_to_deg(roll), rad_to_deg(pitch), rad_to_deg(yaw),
-		seed, out);
+		seed, out, NULL);
 	zassert_equal(st, CMOVE_OK, "expected CMOVE_OK, got %d", st);
 
 	mat4x4_t T_check;
@@ -73,13 +73,14 @@ ZTEST_F(cartesian_pose, test_null_args)
 {
 	const float seed[NUM_JOINTS] = {0};
 	float out[NUM_JOINTS] = {0};
-	zassert_equal(cartesian_pose_to_joints(NULL, 0, 0, 0, 0, 0, 0, seed, out),
+	zassert_equal(cartesian_pose_to_joints(NULL, 0, 0, 0, 0, 0, 0, seed, out,
+					       NULL),
 		      CMOVE_BAD_ARGS, "NULL model");
 	zassert_equal(cartesian_pose_to_joints(&fixture->model, 0, 0, 0, 0, 0, 0,
-					       NULL, out),
+					       NULL, out, NULL),
 		      CMOVE_BAD_ARGS, "NULL seed");
 	zassert_equal(cartesian_pose_to_joints(&fixture->model, 0, 0, 0, 0, 0, 0,
-					       seed, NULL),
+					       seed, NULL, NULL),
 		      CMOVE_BAD_ARGS, "NULL out");
 }
 
@@ -89,14 +90,22 @@ ZTEST_F(cartesian_pose, test_unreachable)
 	float out[NUM_JOINTS] = {0};
 	/* 5 m away is far outside the ~0.3 m workspace. */
 	cmove_status_t st = cartesian_pose_to_joints(
-		&fixture->model, 5.0f, 5.0f, 5.0f, 0, 0, 0, seed, out);
+		&fixture->model, 5.0f, 5.0f, 5.0f, 0, 0, 0, seed, out, NULL);
 	zassert_equal(st, CMOVE_NO_SOLUTION,
 		      "unreachable pose should be CMOVE_NO_SOLUTION, got %d", st);
 }
 
 ZTEST_F(cartesian_pose, test_out_of_limits)
 {
-	/* Joint 0 at 2.80 rad is beyond the +2.618 rad (150 deg) limit.
+	/* Tighten joint limits to +/-150 deg for this test. wrap_to_pi caps IK
+	 * output at +/-180 deg, so the OUT_OF_LIMITS path is only reachable with a
+	 * limit below 180; pin it here instead of relying on the factory default. */
+	for (int i = 0; i < NUM_JOINTS; i++) {
+		fixture->model.joint_limits_min[i] = deg_to_rad(-150.0f);
+		fixture->model.joint_limits_max[i] = deg_to_rad(150.0f);
+	}
+
+	/* Joint 0 at 2.80 rad (160 deg) is beyond the +2.618 rad (150 deg) limit.
 	 * Build the pose from this config, then seed IK right next to it so the
 	 * solver converges back to the out-of-limits solution. */
 	const float theta_oob[NUM_JOINTS] = {
@@ -119,7 +128,7 @@ ZTEST_F(cartesian_pose, test_out_of_limits)
 	cmove_status_t st = cartesian_pose_to_joints(
 		&fixture->model, p.x, p.y, p.z,
 		rad_to_deg(roll), rad_to_deg(pitch), rad_to_deg(yaw),
-		seed, out);
+		seed, out, NULL);
 	zassert_equal(st, CMOVE_OUT_OF_LIMITS,
 		      "expected CMOVE_OUT_OF_LIMITS, got %d", st);
 }

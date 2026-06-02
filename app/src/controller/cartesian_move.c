@@ -11,9 +11,15 @@
 #include "robot_geometry.h"
 #include "feetech_servo.h"
 #include "hal_gpio.h"
+#include "kinematics_math.h"   /* rad_to_deg */
 #include <zephyr/logging/log.h>
 
-LOG_MODULE_REGISTER(cartesian_move, LOG_LEVEL_WRN);
+LOG_MODULE_REGISTER(cartesian_move, LOG_LEVEL_INF);
+
+#define LOG_JOINTS_DEG(tag, a)                                              \
+	LOG_INF("%s: %.1f %.1f %.1f %.1f %.1f %.1f", tag, (double)(a)[0],   \
+		(double)(a)[1], (double)(a)[2], (double)(a)[3],            \
+		(double)(a)[4], (double)(a)[5])
 
 #define SERVO_DEG_LIMIT 180.0f
 
@@ -31,8 +37,21 @@ cmove_status_t cartesian_move_to_pose(float x, float y, float z,
 
 	const poe_robot_model_t *model = robot_geometry_get_model();
 
-	/* 2. Seed IK from the current servo angles (fall back to zeros). */
-	float seed_theta[NUM_JOINTS] = { 0 };
+	/*
+	 * 2. Candidate IK seeds, tried in order. The current servo config is best
+	 * when the target is near the current pose; the fixed fallbacks rescue far
+	 * targets and near-singular goals (e.g. the all-zero "home" config) whose
+	 * basin the current seed may miss. IK is a local solver, so seed restarts
+	 * are how reachable-but-missed poses get found.
+	 */
+	float seeds[][NUM_JOINTS] = {
+		{ 0, 0, 0, 0, 0, 0 },                          /* [0] current (filled) */
+		{ 0, 0, 0, 0, 0, 0 },                          /* [1] home / zero       */
+		{ 0.0f, 0.6f, -1.2f, 0.0f, 0.6f, 0.0f },       /* [2] elbow-bent        */
+		{ 0.0f, -0.6f, 1.2f, 0.0f, -0.6f, 0.0f },      /* [3] elbow-bent (alt)  */
+	};
+	const int n_seeds = (int)(sizeof(seeds) / sizeof(seeds[0]));
+
 	uint16_t positions[NUM_JOINTS];
 	if (feetech_servo_read_multi_positions(k_ids, positions, NUM_JOINTS) ==
 	    0) {
@@ -40,19 +59,37 @@ cmove_status_t cartesian_move_to_pose(float x, float y, float z,
 		for (int i = 0; i < NUM_JOINTS; i++) {
 			servo_deg[i] = FEETECH_POS_TO_DEG(positions[i]);
 		}
-		joint_map_servo_to_model(servo_deg, seed_theta);
+		joint_map_servo_to_model(servo_deg, seeds[0]);
 	} else {
 		LOG_WRN("movec: servo read failed, using zero seed");
 	}
 
-	/* 3. Solve IK for the target pose. */
+	/* 3. Solve IK, retrying from each seed until one converges. */
 	float out_theta[NUM_JOINTS];
-	cmove_status_t st = cartesian_pose_to_joints(model, x, y, z, roll_deg,
-						     pitch_deg, yaw_deg,
-						     seed_theta, out_theta);
+	int ik_iters = 0;
+	cmove_status_t st = CMOVE_NO_SOLUTION;
+	int used_seed = -1;
+	for (int s = 0; s < n_seeds; s++) {
+		st = cartesian_pose_to_joints(model, x, y, z, roll_deg, pitch_deg,
+					      yaw_deg, seeds[s], out_theta,
+					      &ik_iters);
+		used_seed = s;
+		/* OK and OUT_OF_LIMITS are definitive; only retry on no-solution. */
+		if (st == CMOVE_OK || st == CMOVE_OUT_OF_LIMITS) {
+			break;
+		}
+	}
+
+	LOG_INF("IK result: status=%d iters=%d seed=%d", st, ik_iters, used_seed);
 	if (st != CMOVE_OK) {
 		return st;
 	}
+
+	float out_deg[NUM_JOINTS];
+	for (int i = 0; i < NUM_JOINTS; i++) {
+		out_deg[i] = rad_to_deg(out_theta[i]);
+	}
+	LOG_JOINTS_DEG("IK angles (deg)", out_deg);
 
 	/* 4. Map to servo degrees and range-check. */
 	float servo_goal[NUM_JOINTS];
@@ -65,6 +102,8 @@ cmove_status_t cartesian_move_to_pose(float x, float y, float z,
 			return CMOVE_OUT_OF_LIMITS;
 		}
 	}
+
+	LOG_JOINTS_DEG("servo goal(deg)", servo_goal);
 
 	/* 5. Sync-write goal angles with the requested move time (single atomic
 	 * packet; all joints interpolate over move_time_ms and finish together).

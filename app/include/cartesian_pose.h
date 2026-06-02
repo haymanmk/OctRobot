@@ -36,6 +36,7 @@ typedef enum {
  * @param roll_deg,pitch_deg,yaw_deg  target orientation, ZYX intrinsic, degrees
  * @param seed_theta  IK initial guess (model radians)
  * @param out_theta   solved joint angles (model radians)
+ * @param iters_used  if non-NULL, receives the IK iteration count (debug)
  * @return CMOVE_OK / CMOVE_NO_SOLUTION / CMOVE_OUT_OF_LIMITS / CMOVE_BAD_ARGS.
  *         out_theta is written on both CMOVE_OK and CMOVE_OUT_OF_LIMITS (the
  *         final IK iterate); it is left untouched on the other statuses.
@@ -46,7 +47,8 @@ cmove_status_t cartesian_pose_to_joints(const poe_robot_model_t *model,
 					float roll_deg, float pitch_deg,
 					float yaw_deg,
 					const float seed_theta[NUM_JOINTS],
-					float out_theta[NUM_JOINTS]);
+					float out_theta[NUM_JOINTS],
+					int *iters_used);
 
 #ifdef __cplusplus
 }

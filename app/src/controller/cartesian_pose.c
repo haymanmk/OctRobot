@@ -15,8 +15,12 @@ cmove_status_t cartesian_pose_to_joints(const poe_robot_model_t *model,
 					float roll_deg, float pitch_deg,
 					float yaw_deg,
 					const float seed_theta[NUM_JOINTS],
-					float out_theta[NUM_JOINTS])
+					float out_theta[NUM_JOINTS],
+					int *iters_used)
 {
+	if (iters_used != NULL) {
+		*iters_used = 0;
+	}
 	if (model == NULL || seed_theta == NULL || out_theta == NULL) {
 		return CMOVE_BAD_ARGS;
 	}
@@ -30,7 +34,8 @@ cmove_status_t cartesian_pose_to_joints(const poe_robot_model_t *model,
 
 	float out[NUM_JOINTS];
 	ik_status_t ik = inverse_kinematics_compute(model, &T_target,
-						    seed_theta, out, NULL, NULL);
+						    seed_theta, out, NULL,
+						    iters_used);
 
 	switch (ik) {
 	case IK_SUCCESS:
