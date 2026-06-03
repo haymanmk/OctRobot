@@ -110,36 +110,35 @@ def test_spherical_sweep_unit_dirs_near_base():
     np.testing.assert_allclose(dirs[-1], base / np.linalg.norm(base), atol=1e-12)
 
 
-def test_build_aim_act_frames_point_at_target():
-    target = np.array([0.20, 0.0, 0.18])
-    frames = choreo.build_aim_act(target, n=60)
-    assert len(frames) == 60
-    for p, R in frames:
-        z = R[:, 2]
-        want = (target - p) / np.linalg.norm(target - p)
-        np.testing.assert_allclose(z, want, atol=1e-6)
-
-
-def test_build_pin_act_tip_stays_on_target():
-    target = np.array([0.20, 0.0, 0.18])
-    frames = choreo.build_pin_act(target, L=0.02, n=60)
-    assert len(frames) == 60
-    for p, R in frames:
-        tip = p + R @ np.array([0.0, 0.0, 0.02])
+def test_build_pinned_sweep_tip_stays_on_target():
+    target = np.array([0.168, 0.0, 0.243])
+    L = 0.01
+    na, ns, nr = 5, 20, 5
+    frames = choreo.build_pinned_sweep_act(
+        target, L=L, sweep_deg=45.0, tilt_deg=25.0,
+        n_approach=na, n_sweep=ns, n_return=nr)
+    assert len(frames) == na + ns + nr
+    # The sweep keeps the virtual tip pinned on the target.
+    for p, R in frames[na:na + ns]:
+        tip = p + R @ np.array([0.0, 0.0, L])
         np.testing.assert_allclose(tip, target, atol=1e-9)
+    # Returns to the home position with the tool axis level (+X).
+    np.testing.assert_allclose(frames[-1][0], target, atol=1e-9)
+    np.testing.assert_allclose(frames[-1][1][:, 2], [1.0, 0.0, 0.0], atol=1e-9)
 
 
 def test_presets_exist_and_return_frames():
-    seq = choreo.build_sequence(choreo.DEFAULT_CONFIG)
-    assert "aim" in seq and "pin" in seq
-    assert len(seq["aim"]) == choreo.DEFAULT_CONFIG.aim_n
-    assert len(seq["pin"]) == choreo.DEFAULT_CONFIG.pin_n
+    cfg = choreo.DEFAULT_CONFIG
+    seq = choreo.build_sequence(cfg)
+    assert set(seq) == {"reveal"}
+    assert len(seq["reveal"]) == cfg.n_approach + cfg.n_sweep + cfg.n_return
 
 
 def test_validate_flags_unreachable():
     m = choreo.load_model()
     # A target 5 m away is far outside the workspace -> IK cannot converge.
-    bad = choreo.build_pin_act(np.array([5.0, 0.0, 0.0]), L=0.02, n=10)
+    bad = choreo.build_pinned_sweep_act(
+        np.array([5.0, 0.0, 0.0]), n_approach=2, n_sweep=6, n_return=2)
     report = choreo.validate_sequence(m, bad)
     assert len(report["errors"]) > 0
 
@@ -198,15 +197,70 @@ def test_time_ms_scales_with_motion():
 
 
 def test_frames_to_jsonl_roundtrip(tmp_path):
-    target = np.array([0.20, 0.0, 0.18])
-    frames = choreo.build_pin_act(target, L=0.02, n=5)
+    target = np.array([0.168, 0.0, 0.243])
+    frames = choreo.build_pinned_sweep_act(
+        target, n_approach=1, n_sweep=3, n_return=1)
     out = tmp_path / "take.jsonl"
-    choreo.dump_jsonl(frames, str(out), act="pin")
+    choreo.dump_jsonl(frames, str(out), act="reveal")
     lines = out.read_text().strip().splitlines()
     assert len(lines) == 5
     rec = json.loads(lines[0])
-    assert rec["act"] == "pin"
+    assert rec["act"] == "reveal"
     assert len(rec["xyz"]) == 3 and len(rec["rpy"]) == 3
     # xyz matches the frame's flange position
     np.testing.assert_allclose(rec["xyz"], frames[0][0], atol=1e-9)
     np.testing.assert_allclose(rec["rpy"], choreo.matrix_to_rpy(frames[0][1]), atol=1e-9)
+
+
+# --- $movec motion-complete handshake --------------------------------------
+
+
+class _FakeSerial:
+    """Serial stand-in: read() pops scripted byte-strings; write() records."""
+
+    def __init__(self, script):
+        self._script = list(script)
+        self.written = []
+
+    def write(self, b):
+        self.written.append(b)
+
+    def read(self, n):
+        return self._script.pop(0) if self._script else b""
+
+
+def test_classify_reply_tokens():
+    assert choreo.classify_reply("$movec ok") == "ok"
+    assert choreo.classify_reply("$movec ok\r") == "ok"
+    assert choreo.classify_reply("$movec err 3") == "err"
+    assert choreo.classify_reply("[00:00:01] <inf> cartesian_move: IK ...") is None
+    assert choreo.classify_reply("") is None
+    assert choreo.classify_reply("random noise") is None
+
+
+def test_await_reply_skips_logs_then_ok():
+    fs = _FakeSerial([b"[00:00] <inf> noise\n", b"$movec ok\n"])
+    assert choreo._await_reply(fs, timeout_s=1.0) == "ok"
+
+
+def test_await_reply_timeout():
+    fs = _FakeSerial([b"[00:00] <inf> logs only, no token\n"])
+    assert choreo._await_reply(fs, timeout_s=0.05) == "timeout"
+
+
+def test_stream_frames_advances_on_ok():
+    frames = [(np.array([0.168, 0.0, 0.243]), choreo.HOME_R),
+              (np.array([0.168, 0.0, 0.247]), choreo.HOME_R)]
+    fs = _FakeSerial([b"$movec ok\n", b"$movec ok\n"])
+    sent = choreo.stream_frames(fs, frames, speed_mps=0.05, act_label="t")
+    assert sent == 2
+    assert len(fs.written) == 2                 # one $movec line per frame
+    assert fs.written[0].startswith(b"$movec ")
+
+
+def test_stream_frames_aborts_on_err():
+    frames = [(np.array([0.168, 0.0, 0.243]), choreo.HOME_R)] * 3
+    fs = _FakeSerial([b"<inf> log\n$movec err 3\n"])
+    sent = choreo.stream_frames(fs, frames, speed_mps=0.05, act_label="t")
+    assert sent == 0                            # aborted at the first frame
+    assert len(fs.written) == 1

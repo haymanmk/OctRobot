@@ -293,6 +293,20 @@ int feetech_servo_sync_write_angles_timed(const uint8_t *ids,
                                           uint8_t count, uint16_t time_ms);
 
 /**
+ * @brief Block until all listed servos report stopped (MOVING flag clear).
+ *        Adds a short startup settle so a just-issued move is not mistaken for
+ *        "already stopped". The timeout bounds the wait if a MOVING flag is
+ *        flaky; callers should proceed regardless of the return value.
+ * @param ids        servo IDs to watch
+ * @param count      number of servos (max FEETECH_MAX_SERVOS)
+ * @param timeout_ms max time to wait after the startup settle
+ * @return HAL_OK if all stopped, HAL_TIMEOUT if the timeout elapsed first,
+ *         HAL_INVALID on bad arguments
+ */
+int feetech_servo_wait_until_stopped(const uint8_t *ids, uint8_t count,
+                                     uint16_t timeout_ms);
+
+/**
  * @brief Read positions from multiple servos
  *
  * @param ids Array of servo IDs

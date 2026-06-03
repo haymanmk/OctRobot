@@ -397,8 +397,16 @@ int uart_console_process_command(const uint8_t *cmd_buf, size_t cmd_len)
                                yaw, time_ms);
         if (st != CMOVE_OK) {
             LOG_WRN("movec failed: status %d", st);
+            uart_console_reply("$movec err %d\n", (int)st);
             return -EIO;
         }
+
+        /* Block until the servos stop, then signal motion-complete to the host
+         * (replaces the host's fixed post-command delay). */
+        const uint8_t move_ids[] = {1, 2, 3, 4, 5, 6};
+        feetech_servo_wait_until_stopped(move_ids, sizeof(move_ids),
+                                         (uint16_t)(time_ms + 500));
+        uart_console_reply("$movec ok\n");
     }
     /* Teach command */
     else if (strcmp(command, "teach") == 0) {

@@ -507,6 +507,40 @@ int feetech_servo_sync_write_angles_timed(const uint8_t *ids,
 	return feetech_servo_sync_write_positions_timed(ids, positions, count, time_ms);
 }
 
+int feetech_servo_wait_until_stopped(const uint8_t *ids, uint8_t count,
+                                     uint16_t timeout_ms)
+{
+	if (!servo_uart || !ids || count == 0 || count > FEETECH_MAX_SERVOS) {
+		return HAL_INVALID;
+	}
+
+	/* Let motion actually begin before trusting the MOVING flag: right after the
+	 * goal write a servo may still read MOVING=0, which would look "stopped". */
+	uint16_t settle = (timeout_ms < 50) ? timeout_ms : 50;
+	k_msleep(settle);
+
+	const int64_t deadline = k_uptime_get() + timeout_ms;
+	while (k_uptime_get() < deadline) {
+		bool any_moving = false;
+		for (uint8_t i = 0; i < count; i++) {
+			uint8_t moving = 0;
+			/* On a read error, treat this servo as stopped for this poll; the
+			 * outer timeout still bounds the total wait. */
+			if (feetech_protocol_read(servo_uart, ids[i], FEETECH_REG_MOVING,
+			                          1, &moving) == HAL_OK && moving != 0) {
+				any_moving = true;
+				break;
+			}
+		}
+		if (!any_moving) {
+			return HAL_OK;   /* all servos report stopped */
+		}
+		k_msleep(20);
+	}
+
+	return HAL_TIMEOUT;      /* caller proceeds regardless */
+}
+
 int feetech_servo_read_multi_positions(const uint8_t *ids, uint16_t *positions,
                                         uint8_t count)
 {

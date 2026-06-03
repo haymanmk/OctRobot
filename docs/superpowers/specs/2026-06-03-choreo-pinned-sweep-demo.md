@@ -73,3 +73,14 @@ Junctions A→B and B→C both sit at flange `(0.158,0,0.243)` with orientation
 
 - ±45° horizontal azimuth may push the base (J1) or a wrist joint near a limit;
   mitigated by the validation gate + the documented `sweep_deg` fallback.
+
+## Implementation note — wrist-singularity fix (added during build)
+
+A *perfectly level* sweep (tool axis = +X at az=0) sits at the J5=0 wrist
+gimbal-lock (J4 ∥ J6). The validation gate caught this: limits were fine (~38°
+margin) but IK branch-flipped J4/J6 by ~100° at every az=0 crossing
+(`max_step` 1.8 rad). Fix: a constant **`tilt_deg = 25°` downward tool tilt** so
+J5 stays bent throughout; the approach ramps into the tilt (pure J5 pitch) and
+the return ramps out, ending level at home. Result: `max_step` 0.092 rad,
+`min_margin` 0.659 rad, gate passes. The pure-horizontal sweep in the sections
+above is therefore tilted 25° down in the shipped build.

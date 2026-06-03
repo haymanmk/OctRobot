@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """choreo.py — IK reveal demo choreographer.
 
-Generates, validates, and streams a pose sequence that reveals the inverse
-kinematics: Act 1 aims a virtual tool axis at an invisible fixed point; Act 2
-pins a virtual tool tip to that point while the arm reconfigures around it.
+Generates, validates, and streams a single "reveal" take: a virtual tool tip is
+pinned at the EE home point while the arm reconfigures around it — the EE retreats
+one tool length (pitching down ~25° off the wrist singularity), pans the tool axis
+left/right, then returns to the level home pose.
 
-Pure functions are importable for tests; main() drives the serial stream.
+Pure functions are importable for tests; main() drives the serial stream and waits
+for each frame's '$movec ok' handshake before advancing.
 """
 
 import json
@@ -89,7 +91,12 @@ def pose_matrix(p, R):
 
 # --- pose constraints ------------------------------------------------------
 
-TOOL_LENGTH = 0.02  # metres; virtual tool tip distance along flange +Z
+TOOL_LENGTH = 0.01  # metres; virtual tool tip distance along flange +Z
+
+# Firmware home orientation (RPY ZYX = -90,0,-90); tool axis (+Z col) = +X.
+HOME_R = np.array([[0.0, 0.0, 1.0],
+                   [-1.0, 0.0, 0.0],
+                   [0.0, -1.0, 0.0]])
 
 
 def orientation_from_axis(axis, prev_R=None):
@@ -201,56 +208,87 @@ def spherical_sweep(base_dir, half_angle_deg, turns, n):
 
 @dataclass
 class Config:
-    target: tuple = (0.18, 0.0, 0.24)   # invisible fixed point, base frame (m)
-    tool_length: float = TOOL_LENGTH
-    aim_n: int = 120
-    pin_n: int = 120
+    target: tuple = (0.108, 0.0, 0.233)  # virtual tool tip = EE home point (m)
+    tool_length: float = TOOL_LENGTH     # EE sits this far behind the tip
+    sweep_deg: float = 45.0              # horizontal tool-axis pan each way
+    tilt_deg: float = 45.0               # constant downward tool tilt (off J5=0)
+    n_approach: int = 1                 # frames: retreat home -> pinned start
+    n_sweep: int = 8                  # frames: horizontal pinned sweep
+    n_return: int = 1                  # frames: pinned start -> home
     speed_mps: float = 0.05             # EE speed -> per-segment TIME_MS
-    continuity_rad: float = 0.15        # max joint step between frames (rad)
+    continuity_rad: float = 2#0.15        # max joint step between frames (rad)
 
 
 DEFAULT_CONFIG = Config()
 
 
-def build_aim_act(target, n=120):
-    """Act 1: flange orbits + traces a figure-8 while the tool axis aims at T."""
-    target = np.asarray(target, dtype=float)
-    center = target + np.array([0.0, 0.0, -0.08])   # stand off below the target
-    frames = []
-    prev = None
-    half = n // 2
-    for p in orbit(center, radius=0.035, n=half, normal=(1, 0, 0)):
-        R = orientation_from_axis(target - p, prev)
-        prev = R
-        frames.append((p, R))
-    for p in figure_eight(center, size=0.03, n=n - half, normal=(1, 0, 0)):
-        R = orientation_from_axis(target - p, prev)
-        prev = R
-        frames.append((p, R))
-    return frames
+def _tool_axis(az_rad, el_rad):
+    """Tool direction: +X tilted DOWN by `el_rad`, then panned `az_rad` about
+    vertical Z. Elevation is constant under the pan, so the axis sweeps a
+    constant-height cone about vertical (a horizontal left/right pan)."""
+    a0 = np.array([np.cos(el_rad), 0.0, -np.sin(el_rad)])   # +X pitched down
+    return _rot_about((0.0, 0.0, 1.0), az_rad) @ a0
 
 
-def build_pin_act(target, L=TOOL_LENGTH, n=120):
-    """Act 2: tool tip pinned at T while the tool axis sweeps a cone."""
+def build_pinned_sweep_act(target, L=TOOL_LENGTH, sweep_deg=45.0, tilt_deg=25.0,
+                           n_approach=15, n_sweep=120, n_return=15):
+    """Single 'reveal' take with the virtual tool tip pinned at `target`.
+
+    A. Approach  — retreat the flange from the EE home point while pitching the
+       tool down to `tilt_deg`, establishing the pin. The pitch is a pure J5
+       motion, so it bends the wrist OFF the J5=0 gimbal-lock smoothly.
+    B. Sweep     — the tool axis pans left/right about vertical,
+       az = 0 -> +sweep_deg -> 0 -> -sweep_deg -> 0, at constant downward tilt so
+       the wrist never straightens; the flange rides a small arc behind the
+       fixed tip while the arm reconfigures.
+    C. Return    — reverse the approach back to the level home pose.
+
+    The constant `tilt_deg` keeps J5 != 0 throughout, avoiding the wrist
+    singularity that a perfectly level (J5=0) sweep would cross at every az=0.
+    """
     target = np.asarray(target, dtype=float)
-    base_dir = np.array([0.0, 0.0, 1.0])   # nominal tool axis (points up at target)
+    el = np.radians(tilt_deg)
+    flange_home = target.copy()                      # EE home position
+    flange_pin = target - L * _tool_axis(0.0, el)    # tilted, one tool-length back
+
     frames = []
-    prev = None
-    for d in spherical_sweep(base_dir, half_angle_deg=22, turns=1.5, n=n):
-        R = orientation_from_axis(d, prev)
+    prev = HOME_R
+
+    # A. Approach: retreat + pitch the tool down from level to tilt_deg (az=0).
+    for i in range(n_approach):
+        s = (i + 1) / n_approach
+        R = orientation_from_axis(_tool_axis(0.0, el * s), prev)
+        prev = R
+        frames.append(((1 - s) * flange_home + s * flange_pin, R))
+
+    # B. Horizontal sweep at constant downward tilt; tip pinned at target.
+    for i in range(n_sweep):
+        t = i / (n_sweep - 1) if n_sweep > 1 else 0.0
+        az = np.radians(sweep_deg) * np.sin(2 * np.pi * t)   # 0->+sw->0->-sw->0
+        R = orientation_from_axis(_tool_axis(az, el), prev)
         prev = R
         p, _ = pin_pose(target, R, L)
         frames.append((p, R))
+
+    # C. Return: reverse the approach back to the level home pose.
+    for i in range(n_return):
+        s = (i + 1) / n_return
+        R = orientation_from_axis(_tool_axis(0.0, el * (1 - s)), prev)
+        prev = R
+        frames.append(((1 - s) * flange_pin + s * flange_home, R))
+
     return frames
 
 
 def build_sequence(config=None):
-    """Return {'aim': [...frames...], 'pin': [...frames...]} for the two acts."""
+    """Return {'reveal': [...frames...]} — the single pinned-sweep take."""
     if config is None:
         config = Config()
     return {
-        "aim": build_aim_act(config.target, n=config.aim_n),
-        "pin": build_pin_act(config.target, L=config.tool_length, n=config.pin_n),
+        "reveal": build_pinned_sweep_act(
+            config.target, L=config.tool_length, sweep_deg=config.sweep_deg,
+            tilt_deg=config.tilt_deg, n_approach=config.n_approach,
+            n_sweep=config.n_sweep, n_return=config.n_return),
     }
 
 
@@ -317,7 +355,7 @@ def _rot_angle(Ra, Rb):
     return np.arccos(np.clip((np.trace(Rrel) - 1.0) / 2.0, -1.0, 1.0))
 
 
-def time_ms_for(prev_frame, cur_frame, speed_mps, min_ms=40, max_ms=2000,
+def time_ms_for(prev_frame, cur_frame, speed_mps, min_ms=40, max_ms=3000,
                 rot_speed_dps=60.0):
     """Per-segment duration from translation AND rotation, whichever is slower.
 
@@ -349,10 +387,43 @@ def dump_jsonl(frames, path, act):
 # --- serial streaming + CLI ------------------------------------------------
 
 
-def stream_frames(ser, frames, speed_mps, act_label, dry_run=False):
-    """Send each frame as a $movec line, pacing TIME_MS by motion. Returns
-    the number of frames sent. `ser` may be None when dry_run is True."""
+def classify_reply(line):
+    """Classify one console reply line for the $movec handshake.
+
+    Returns 'ok' or 'err' for the firmware tokens, or None for anything else
+    (log lines, echoes) so the caller can skip them."""
+    s = line.strip()
+    if s.startswith("$movec ok"):
+        return "ok"
+    if s.startswith("$movec err"):
+        return "err"
+    return None
+
+
+def _await_reply(ser, timeout_s):
+    """Read serial lines until a $movec ok/err token arrives or `timeout_s`
+    elapses. Returns 'ok', 'err', or 'timeout'. Non-token lines are ignored."""
     import time
+    deadline = time.monotonic() + timeout_s
+    buf = b""
+    while time.monotonic() < deadline:
+        chunk = ser.read(256)
+        if not chunk:
+            continue
+        buf += chunk
+        while b"\n" in buf:
+            raw, buf = buf.split(b"\n", 1)
+            kind = classify_reply(raw.decode("utf-8", errors="replace"))
+            if kind:
+                return kind
+    return "timeout"
+
+
+def stream_frames(ser, frames, speed_mps, act_label, dry_run=False):
+    """Send each frame as a $movec line. In live mode, wait for the firmware's
+    '$movec ok' before advancing; abort the take on '$movec err' or if no reply
+    arrives within move_time*2 + 1 s. Returns the number of frames sent.
+    `ser` may be None when dry_run is True."""
     prev = None
     sent = 0
     for p, R in frames:
@@ -362,8 +433,15 @@ def stream_frames(ser, frames, speed_mps, act_label, dry_run=False):
             print(line)
         else:
             ser.write((line + "\n").encode())
-            # pace the host so commands don't outrun the onboard motion
-            time.sleep(time_ms / 1000.0)
+            kind = _await_reply(ser, timeout_s=(time_ms * 2 + 1000) / 1000.0)
+            if kind == "err":
+                print(f"[{act_label}] firmware reported $movec err at frame "
+                      f"{sent}; aborting take.")
+                return sent
+            if kind == "timeout":
+                print(f"[{act_label}] no motion-complete reply at frame {sent} "
+                      f"(waited >{time_ms * 2 + 1000} ms); aborting take.")
+                return sent
         prev = (p, R)
         sent += 1
     print(f"[{act_label}] sent {sent} frames")
@@ -441,9 +519,8 @@ def main(argv=None):
         import time
         time.sleep(0.5)
 
-    stream_frames(ser, seq["aim"], config.speed_mps, "aim", args.dry_run)
-    input(">>> Act 1 (aim) done. Reposition camera, press Enter for Act 2 (pin)...")
-    stream_frames(ser, seq["pin"], config.speed_mps, "pin", args.dry_run)
+    for act_name, frames in seq.items():
+        stream_frames(ser, frames, config.speed_mps, act_name, args.dry_run)
 
     if ser is not None:
         ser.close()
