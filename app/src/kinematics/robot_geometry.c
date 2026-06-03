@@ -81,13 +81,30 @@ poe_robot_model_t robot_geometry_factory_defaults(void)
 	model.M.m[3][3] =  1.0f;
 	
 	/* ============================================================
-	 * Joint Limits (Conservative Defaults)
+	 * Joint Limits — measured per-joint mechanical range (radians)
 	 * ============================================================
-	 * User should measure actual mechanical limits!
+	 * MUST stay in sync with joint_limits in validation/robot_config.yaml.
+	 * Radian literals match the YAML exactly; degrees shown for reference.
 	 */
+	static const float jl_min[NUM_JOINTS] = {
+		-2.792527f,  /* J1  -160° */
+		-1.3089f,    /* J2   -75° */
+		-3.0543f,    /* J3  -175° */
+		-2.7052f,    /* J4  -155° */
+		-2.0071f,    /* J5  -115° */
+		-3.14f,      /* J6  -180° */
+	};
+	static const float jl_max[NUM_JOINTS] = {
+		 2.792527f,  /* J1  +160° */
+		 2.0943f,    /* J2  +120° */
+		 1.1344f,    /* J3   +65° */
+		 2.7052f,    /* J4  +155° */
+		 2.0071f,    /* J5  +115° */
+		 3.14f,      /* J6  +180° */
+	};
 	for (int i = 0; i < NUM_JOINTS; i++) {
-		model.joint_limits_min[i] = deg_to_rad(-150.0f);  /* -150° */
-		model.joint_limits_max[i] = deg_to_rad(150.0f);   /* +150° */
+		model.joint_limits_min[i] = jl_min[i];
+		model.joint_limits_max[i] = jl_max[i];
 	}
 	
 	/* Compute CRC */

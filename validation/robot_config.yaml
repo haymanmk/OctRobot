@@ -32,7 +32,9 @@ home_config:
   - [ 0.000, -1.000, 0.000, 0.243]
   - [ 0.000,  0.000, 0.000, 1.000]
 
-# Joint limits (radians), ±150 degrees
+# Joint limits (radians) — measured per-joint mechanical range.
+# Must match jl_min/jl_max in robot_geometry_factory_defaults() (robot_geometry.c).
+# Degrees:  J1 ±160   J2 -75/+120   J3 -175/+65   J4 ±155   J5 ±115   J6 ±180
 joint_limits:
-  min: [-2.6179938779, -2.6179938779, -2.6179938779, -2.6179938779, -2.6179938779, -2.6179938779]
-  max: [ 2.6179938779,  2.6179938779,  2.6179938779,  2.6179938779,  2.6179938779,  2.6179938779]
+  min: [-2.792527, -1.3089, -3.0543, -2.7052, -2.0071, -3.14]
+  max: [ 2.792527,  2.0943,  1.1344,  2.7052,  2.0071,  3.14]
